@@ -1,0 +1,28 @@
+{
+  "_comment": "Virtual ad banners overlaid on top of convenience_store.glb (the GLB itself has no ad creative). Positions are hand-placed in the store's world coordinates (see backend/data/store_layout.json store_bounds) to test the 'bonus' ask: does placement change how much attention an ad captures? Edit freely - these are NOT derived from the GLB.",
+  "ad_slots": [
+    {
+      "slot_id": "endcap_banner",
+      "description": "Promotional banner - tests a high-traffic endcap placement (directly in the shopper's forward view from spawn, right above the cereal aisle) against a low-traffic back-corner placement.",
+      "size": { "width": 6, "height": 3 },
+      "variants": [
+        {
+          "variant_id": "variant_a_high_traffic",
+          "label": "Endcap banner - above cereal aisle (high-traffic)",
+          "position": [1.5, 6.2, 9.3],
+          "rotation_y_deg": 180,
+          "creative_color": "#ff6b35",
+          "creative_text": "SALE: Buy 2 Cereals, Get 1 Free!"
+        },
+        {
+          "variant_id": "variant_b_low_traffic",
+          "label": "Back-corner banner (low-traffic control)",
+          "position": [-22, 6, 17],
+          "rotation_y_deg": 200,
+          "creative_color": "#2b6cff",
+          "creative_text": "SALE: Buy 2 Cereals, Get 1 Free!"
+        }
+      ]
+    }
+  ]
+}

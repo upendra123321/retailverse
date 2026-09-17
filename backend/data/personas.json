@@ -1,0 +1,57 @@
+{
+  "_comment": "Structured, editable AI shopper persona library. This drives BOTH the agent's navigation policy (where it walks, how long it stays) and its gaze weighting (which zones it's biased to look at) - the 'differentiator' piece of the challenge. Add/edit personas here (or via POST /api/personas) without touching code. zone/category keys must match backend/data/store_layout.json.",
+  "personas": [
+    {
+      "persona_key": "mission_shopper",
+      "label": "Mission Shopper",
+      "description": "Knows exactly what they came for. Walks directly to their target product(s), grabs it, and heads to checkout. Rarely distracted by anything off their path.",
+      "navigation_style": "direct",
+      "target_categories": ["breakfast"],
+      "preferred_product_keys": ["crispix"],
+      "patience_seconds": 25,
+      "browse_probability": 0.08,
+      "ad_attention_bias": 0.05,
+      "price_sensitivity": "low",
+      "purchase_likelihood": 0.92
+    },
+    {
+      "persona_key": "browser",
+      "label": "Browser",
+      "description": "No fixed agenda. Wanders the whole store, glances at most shelves and signage, easily catches ads/promotions, may leave without buying.",
+      "navigation_style": "explore",
+      "target_categories": [],
+      "preferred_product_keys": [],
+      "patience_seconds": 90,
+      "browse_probability": 0.9,
+      "ad_attention_bias": 0.55,
+      "price_sensitivity": "medium",
+      "purchase_likelihood": 0.3
+    },
+    {
+      "persona_key": "brand_loyalist",
+      "label": "Brand Loyalist",
+      "description": "Only interested in one preferred brand. Walks straight past competitor products and promotions to find it; largely immune to in-store advertising.",
+      "navigation_style": "direct",
+      "target_categories": ["breakfast"],
+      "preferred_product_keys": ["trix"],
+      "patience_seconds": 20,
+      "browse_probability": 0.05,
+      "ad_attention_bias": 0.1,
+      "price_sensitivity": "low",
+      "purchase_likelihood": 0.85
+    },
+    {
+      "persona_key": "switcher",
+      "label": "Switcher",
+      "description": "Price- and promotion-driven. Compares several similar products side by side before deciding, lingers at shelves, and is the most likely to notice and act on ads/discounts.",
+      "navigation_style": "compare",
+      "target_categories": ["breakfast", "canned_goods"],
+      "preferred_product_keys": [],
+      "patience_seconds": 60,
+      "browse_probability": 0.5,
+      "ad_attention_bias": 0.7,
+      "price_sensitivity": "high",
+      "purchase_likelihood": 0.6
+    }
+  ]
+}

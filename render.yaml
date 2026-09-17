@@ -1,0 +1,30 @@
+# Render Blueprint: https://render.com/docs/blueprint-spec
+# Deploy: push this repo to GitHub, then in Render dashboard choose
+# "New +" -> "Blueprint" and point it at the repo. Render reads this file,
+# builds Dockerfile at the repo root, and gives you a free HTTPS URL.
+#
+# Free tier notes:
+#  - No persistent disk -> backend/data/analytics.db resets on every deploy
+#    and on the periodic free-tier sleep/restart cycle. Fine for a demo;
+#    see README "Deployment" for the Postgres/EFS upgrade path.
+#  - Free web services sleep after ~15 min idle and take ~30-60s to wake on
+#    the next request - warn the audience before a live demo, or upgrade to
+#    a paid instance for the actual presentation slot.
+services:
+  - type: web
+    name: shopper-persona-panel
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    envVars:
+      - key: LITE_LLM_ENDPOINT
+        sync: false
+      - key: LITE_LLM_API_KEY
+        sync: false
+      - key: LITE_LLM_MODEL
+        sync: false
+      - key: LITE_LLM_API_VERSION
+        sync: false
+      - key: LLM_TIMEOUT_SECONDS
+        value: "15"

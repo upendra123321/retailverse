@@ -16,6 +16,8 @@ import { useBehaviorSession } from "./session/useBehaviorSession";
 import { useShoppingCart } from "./components/Interaction/useShoppingCart";
 import { ShoppingHud } from "./components/Interaction/ShoppingHud";
 import { AnalyticsDashboard } from "./components/Dashboard/AnalyticsDashboard";
+import { purchaseProbability } from "./components/Agent/personaNavigation";
+import { priceFor } from "./data/productCatalog";
 import type { AdZonesConfig, StoreZone } from "./types/store";
 import "./App.css";
 
@@ -214,13 +216,16 @@ export default function App() {
       } else if (zone.zone_id === "checkout_counter" && agentConfig) {
         for (const visited of visitedProductZonesRef.current) {
           if (!visited.product_key) continue;
-          if (Math.random() < agentConfig.persona.purchase_likelihood) {
-            const price = 2.99 + (visited.product_key.length % 5); // simple deterministic-ish stand-in price
+          // Same synthetic price catalog a real shopper's cart uses, so
+          // real-vs-agent purchase data is comparable apples-to-apples.
+          const { price } = priceFor(visited.product_key);
+          const probability = purchaseProbability(agentConfig.persona, price);
+          if (Math.random() < probability) {
             behaviorSession.logEvent({
               event_type: "purchase",
               zone_id: visited.zone_id,
               product_key: visited.product_key,
-              payload: { price, quantity: 1, decided_by: "persona_purchase_likelihood" },
+              payload: { price, quantity: 1, decided_by: "persona_purchase_likelihood_x_price_sensitivity" },
             });
           }
         }

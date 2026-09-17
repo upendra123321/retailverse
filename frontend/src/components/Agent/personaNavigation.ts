@@ -76,6 +76,28 @@ export function maybePickGlanceZone(
   return null;
 }
 
+/** Average synthetic shelf price across `productCatalog.ts`, used as the
+ * reference point for price-elasticity below - i.e. "above/below average"
+ * rather than an absolute threshold, so it stays sane if prices change. */
+const REFERENCE_PRICE = 4.0;
+
+/**
+ * Adjusts a persona's flat `purchase_likelihood` for a specific product's
+ * price, based on `price_sensitivity`:
+ *  - "low": price plays no role (loyalists/mission shoppers buy regardless).
+ *  - "medium"/"high": above-average-priced items are progressively less
+ *    likely to convert, below-average items slightly more likely to -
+ *    a simple, explainable stand-in for real price elasticity, so
+ *    price/promotion experiments have somewhere to act on.
+ */
+export function purchaseProbability(persona: Persona, price: number): number {
+  if (persona.price_sensitivity === "low") return persona.purchase_likelihood;
+  const weight = persona.price_sensitivity === "high" ? 0.6 : 0.3;
+  const priceDeltaRatio = (price - REFERENCE_PRICE) / REFERENCE_PRICE;
+  const multiplier = 1 - weight * priceDeltaRatio;
+  return Math.min(1, Math.max(0.05, persona.purchase_likelihood * multiplier));
+}
+
 function shuffle<T>(items: T[]): T[] {
   const copy = [...items];
   for (let i = copy.length - 1; i > 0; i--) {

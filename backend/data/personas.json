@@ -1,13 +1,17 @@
 {
-  "_comment": "Structured, editable AI shopper persona library. This drives BOTH the agent's navigation policy (where it walks, how long it stays) and its gaze weighting (which zones it's biased to look at) - the 'differentiator' piece of the challenge. Add/edit personas here (or via POST /api/personas) without touching code. zone/category keys must match backend/data/store_layout.json.",
+  "_comment": "Structured, editable AI shopper persona library. Drives both agent navigation and gaze weighting. Edit here or via POST /api/personas.",
   "personas": [
     {
       "persona_key": "mission_shopper",
       "label": "Mission Shopper",
       "description": "Knows exactly what they came for. Walks directly to their target product(s), grabs it, and heads to checkout. Rarely distracted by anything off their path.",
       "navigation_style": "direct",
-      "target_categories": ["breakfast"],
-      "preferred_product_keys": ["crispix"],
+      "target_categories": [
+        "breakfast"
+      ],
+      "preferred_product_keys": [
+        "crispix"
+      ],
       "patience_seconds": 25,
       "browse_probability": 0.08,
       "ad_attention_bias": 0.05,
@@ -32,8 +36,12 @@
       "label": "Brand Loyalist",
       "description": "Only interested in one preferred brand. Walks straight past competitor products and promotions to find it; largely immune to in-store advertising.",
       "navigation_style": "direct",
-      "target_categories": ["breakfast"],
-      "preferred_product_keys": ["trix"],
+      "target_categories": [
+        "breakfast"
+      ],
+      "preferred_product_keys": [
+        "trix"
+      ],
       "patience_seconds": 20,
       "browse_probability": 0.05,
       "ad_attention_bias": 0.1,
@@ -45,13 +53,29 @@
       "label": "Switcher",
       "description": "Price- and promotion-driven. Compares several similar products side by side before deciding, lingers at shelves, and is the most likely to notice and act on ads/discounts.",
       "navigation_style": "compare",
-      "target_categories": ["breakfast", "canned_goods"],
+      "target_categories": [
+        "breakfast",
+        "canned_goods"
+      ],
       "preferred_product_keys": [],
       "patience_seconds": 60,
       "browse_probability": 0.5,
       "ad_attention_bias": 0.7,
       "price_sensitivity": "high",
       "purchase_likelihood": 0.6
+    },
+    {
+      "persona_key": "001",
+      "label": "John 001",
+      "description": "Buy cereal",
+      "navigation_style": "compare",
+      "target_categories": [],
+      "preferred_product_keys": [],
+      "patience_seconds": 45.0,
+      "browse_probability": 0.5,
+      "ad_attention_bias": 0.4,
+      "price_sensitivity": "medium",
+      "purchase_likelihood": 0.5
     }
   ]
 }

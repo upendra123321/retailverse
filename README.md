@@ -232,12 +232,16 @@ non-repeatable, and hard to audit. Instead, `personaNavigation.ts` +
    or nearby products, weighted by `ad_attention_bias` — this is the gaze
    simulation used to answer "did the AI persona look at our ad?"
 4. **Purchase decision**: when the agent reaches checkout, each product zone
-   it visited along the way is independently rolled against that persona's
-   `purchase_likelihood` (`Math.random() < persona.purchase_likelihood`) to
-   decide whether it becomes a logged `purchase` event. `price_sensitivity`
-   is captured per persona today for future price-elasticity experiments but
-   isn't yet wired into the purchase-probability calculation — noted in
-   [limitations](#known-limitations--roadmap).
+   it visited along the way is independently rolled against a
+   price-adjusted probability (`purchaseProbability()` in
+   `personaNavigation.ts`): `price_sensitivity: "low"` personas buy at their
+   flat `purchase_likelihood` regardless of price; `"medium"`/`"high"`
+   personas get that likelihood scaled down for above-(synthetic-)average-
+   priced items and slightly up for below-average ones — a simple,
+   explainable stand-in for real price elasticity that gives
+   promotion/pricing experiments something to actually move. Purchases use
+   the same synthetic price catalog (`data/productCatalog.ts`) a real
+   shopper's cart uses, so real-vs-agent purchase data stays comparable.
 5. **Tool/API selection**: the agent logs the exact same
    `zone_dwell` / `product_interaction` / `purchase` / `navigation_sample`
    events, through the exact same `/api/sessions/*` endpoints, as a real
@@ -441,10 +445,10 @@ audit trail, human approval for consequential actions):
 
 ## Known limitations & roadmap
 
-- `price_sensitivity` is captured in the persona schema and shown in the UI
-  but not yet wired into the purchase-probability calculation (currently
-  purchase decisions use only `purchase_likelihood`) — natural next step for
-  price-elasticity / promotion-effectiveness experiments.
+- Price elasticity is a simple linear stand-in (`purchaseProbability()`)
+  around one reference price, not a learned/calibrated demand curve — good
+  enough to make persona-vs-persona pricing comparisons directional, not to
+  forecast real revenue.
 - Movement uses a simple downward raycast to keep the camera at eye-height;
   no wall-collision detection yet.
 - Gaze estimation is a lightweight, calibration-based approximation (not

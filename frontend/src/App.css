@@ -558,3 +558,133 @@
   font-size: 13px;
   line-height: 1.5;
 }
+
+/* Population-scale batch simulation panel */
+.dashboard-simulate {
+  margin-top: 16px;
+  padding: 14px;
+  border-radius: 8px;
+  background: rgba(61, 126, 255, 0.08);
+  border: 1px solid rgba(61, 126, 255, 0.35);
+}
+
+.dashboard-simulate h3 {
+  margin: 0 0 4px;
+}
+
+.dashboard-simulate-hint {
+  font-size: 12px;
+  opacity: 0.75;
+  margin: 0 0 10px;
+}
+
+.dashboard-simulate-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+}
+
+.dashboard-simulate-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.dashboard-simulate-controls input[type="number"] {
+  width: 70px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 6px;
+  padding: 6px;
+  color: #fff;
+}
+
+.dashboard-simulate-personas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  font-size: 12px;
+}
+
+.dashboard-simulate-persona-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.dashboard-simulate-persona-note {
+  opacity: 0.6;
+  font-size: 11px;
+}
+
+.dashboard-simulate-controls button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  background: #3d7eff;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.dashboard-simulate-controls button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.dashboard-simulate-result {
+  margin: 10px 0 0;
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+/* Attention heatmap (top-down floor plan) */
+.heatmap-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin: 12px 0 20px;
+}
+
+.heatmap-panel h4 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  opacity: 0.8;
+}
+
+.heatmap-svg {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+}
+
+.heatmap-bg {
+  fill: transparent;
+}
+
+.heatmap-dot {
+  fill: #3d7eff;
+  stroke: none;
+}
+
+.heatmap-dot.heatmap-dot-checkout {
+  fill: #9b59b6;
+}
+
+.heatmap-dot.heatmap-dot-ad {
+  fill: #ff6b35;
+}
+
+.heatmap-dot-center {
+  fill: rgba(255, 255, 255, 0.9);
+}
+
+.heatmap-label {
+  fill: #fff;
+  font-size: 9px;
+  opacity: 0.85;
+}

@@ -1,6 +1,16 @@
-import { useEffect, useState } from "react";
-import { fetchCompare, fetchInsights, fetchPersonas, fetchZoneStats } from "../../api/client";
-import type { Persona } from "../../types/store";
+import { useEffect, useMemo, useState } from "react";
+import {
+  fetchAdZones,
+  fetchCompare,
+  fetchInsights,
+  fetchPersonas,
+  fetchStoreLayout,
+  fetchZoneStats,
+  runBatchSimulation,
+  type BatchSimulateResult,
+} from "../../api/client";
+import type { AdZonesConfig, Persona, StoreLayout } from "../../types/store";
+import { AttentionHeatmap, type PlottableZone } from "./AttentionHeatmap";
 
 interface Props {
   onClose: () => void;
@@ -20,6 +30,8 @@ interface ZoneStat {
 
 export function AnalyticsDashboard({ onClose }: Props) {
   const [personas, setPersonas] = useState<Persona[]>([]);
+  const [storeLayout, setStoreLayout] = useState<StoreLayout | null>(null);
+  const [adZones, setAdZones] = useState<AdZonesConfig | null>(null);
   const [subjectType, setSubjectType] = useState<string>("");
   const [personaKey, setPersonaKey] = useState<string>("");
   const [variantId, setVariantId] = useState<string>("");
@@ -33,9 +45,58 @@ export function AnalyticsDashboard({ onClose }: Props) {
   const [insightsLoading, setInsightsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Population-scale batch simulation controls.
+  const [simCount, setSimCount] = useState(100);
+  const [simPersonaKeys, setSimPersonaKeys] = useState<Set<string>>(new Set());
+  const [simRunning, setSimRunning] = useState(false);
+  const [simResult, setSimResult] = useState<BatchSimulateResult | null>(null);
+
   useEffect(() => {
-    fetchPersonas().then(setPersonas).catch(() => {});
+    fetchPersonas()
+      .then((list) => {
+        setPersonas(list);
+        setSimPersonaKeys(new Set(list.map((p) => p.persona_key))); // default: whole library selected
+      })
+      .catch(() => {});
+    fetchStoreLayout().then(setStoreLayout).catch(() => {});
+    fetchAdZones().then(setAdZones).catch(() => {});
   }, []);
+
+  const plottableZones: PlottableZone[] = useMemo(() => {
+    const fromStore: PlottableZone[] = (storeLayout?.zones ?? [])
+      .filter((z) => z.type === "product" || z.type === "checkout")
+      .map((z) => ({ zone_id: z.zone_id, display_name: z.display_name, type: z.type, center: z.center }));
+    const fromAds: PlottableZone[] = (adZones?.ad_slots ?? []).flatMap((slot) =>
+      slot.variants.map((v) => ({ zone_id: v.variant_id, display_name: v.label, type: "ad", center: v.position }))
+    );
+    return [...fromStore, ...fromAds];
+  }, [storeLayout, adZones]);
+
+  const toggleSimPersona = (key: string) => {
+    setSimPersonaKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const runSimulation = () => {
+    setSimRunning(true);
+    setErrorMsg(null);
+    const useAll = simPersonaKeys.size === 0 || simPersonaKeys.size === personas.length;
+    runBatchSimulation({
+      count: simCount,
+      persona_keys: useAll ? undefined : Array.from(simPersonaKeys),
+      variant_id: variantId || undefined,
+    })
+      .then((result) => {
+        setSimResult(result);
+        refresh();
+      })
+      .catch((err) => setErrorMsg(err instanceof Error ? err.message : "Batch simulation failed"))
+      .finally(() => setSimRunning(false));
+  };
 
   const refresh = () => {
     setLoading(true);
@@ -110,6 +171,46 @@ export function AnalyticsDashboard({ onClose }: Props) {
           <button onClick={refresh}>Refresh</button>
         </div>
 
+        <div className="dashboard-simulate">
+          <h3>Population-scale simulation</h3>
+          <p className="dashboard-simulate-hint">
+            Run many AI persona shoppers at once, headlessly (no 3D rendering) - a real statistical panel instead of one
+            agent session at a time. Uses the same deterministic persona logic as the live 3D agent.
+          </p>
+          <div className="dashboard-simulate-controls">
+            <label>
+              Shoppers
+              <input
+                type="number"
+                min={1}
+                max={500}
+                value={simCount}
+                onChange={(e) => setSimCount(Math.max(1, Math.min(500, Number(e.target.value) || 1)))}
+              />
+            </label>
+            <div className="dashboard-simulate-personas">
+              {personas.map((p) => (
+                <label key={p.persona_key} className="dashboard-simulate-persona-chip">
+                  <input type="checkbox" checked={simPersonaKeys.has(p.persona_key)} onChange={() => toggleSimPersona(p.persona_key)} />
+                  {p.label}
+                </label>
+              ))}
+              <span className="dashboard-simulate-persona-note">(evenly split across checked personas)</span>
+            </div>
+            <button onClick={runSimulation} disabled={simRunning}>
+              {simRunning ? "Simulating..." : `Simulate ${simCount} shoppers`}
+            </button>
+          </div>
+          {simResult && (
+            <p className="dashboard-simulate-result">
+              Created {simResult.created} session(s) in {simResult.elapsed_ms.toFixed(0)}ms ·{" "}
+              {Object.entries(simResult.per_persona_counts)
+                .map(([k, v]) => `${k}: ${v}`)
+                .join(", ")}
+            </p>
+          )}
+        </div>
+
         {errorMsg && <p className="dashboard-error">{errorMsg}</p>}
         <p className="dashboard-session-count">{sessionCount} session(s) match this filter.</p>
 
@@ -117,6 +218,13 @@ export function AnalyticsDashboard({ onClose }: Props) {
           <p>Loading...</p>
         ) : (
           <>
+            {compare?.per_zone && plottableZones.length > 0 && (
+              <>
+                <h3>Attention heatmap (floor plan)</h3>
+                <AttentionHeatmap zones={plottableZones} perZone={compare.per_zone} />
+              </>
+            )}
+
             <h3>Attention by zone</h3>
             {zones.length === 0 ? (
               <p>No dwell data yet - run a real or agent session first.</p>

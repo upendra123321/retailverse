@@ -63,19 +63,6 @@
       "ad_attention_bias": 0.7,
       "price_sensitivity": "high",
       "purchase_likelihood": 0.6
-    },
-    {
-      "persona_key": "001",
-      "label": "John 001",
-      "description": "Buy cereal",
-      "navigation_style": "compare",
-      "target_categories": [],
-      "preferred_product_keys": [],
-      "patience_seconds": 45.0,
-      "browse_probability": 0.5,
-      "ad_attention_bias": 0.4,
-      "price_sensitivity": "medium",
-      "purchase_likelihood": 0.5
     }
   ]
 }

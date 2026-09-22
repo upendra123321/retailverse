@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import db
 from .config import FRONTEND_DEV_ORIGINS, FRONTEND_DIST_DIR
-from .routers import agent, analytics, calibration, model, personas, sessions, store
+from .routers import agent, analytics, calibration, model, personas, sessions, simulate, store
 
 app = FastAPI(
     title="Convenience Store Walkthrough API",
@@ -36,6 +36,7 @@ app.include_router(store.router)
 app.include_router(personas.router)
 app.include_router(sessions.router)
 app.include_router(analytics.router)
+app.include_router(simulate.router)
 
 
 @app.get("/api/health")

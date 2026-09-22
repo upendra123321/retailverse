@@ -184,6 +184,39 @@ export async function fetchCompare(params: { persona_key?: string; variant_id?: 
   return res.json();
 }
 
+// --- Population-scale batch simulation ---------------------------------------
+
+export interface BatchSimulateRequestPayload {
+  count: number;
+  persona_keys?: string[] | null;
+  variant_id?: string | null;
+}
+
+export interface BatchSimulateResult {
+  created: number;
+  session_ids: string[];
+  per_persona_counts: Record<string, number>;
+  per_persona_purchase_sessions: Record<string, number>;
+  elapsed_ms: number;
+}
+
+/** Runs N synthetic shopper journeys headlessly on the backend (no 3D
+ * rendering) in one request - see backend/app/simulation.py. This is what
+ * makes "population-scale" a real, demoable capability instead of one agent
+ * at a time in the 3D view. */
+export async function runBatchSimulation(payload: BatchSimulateRequestPayload): Promise<BatchSimulateResult> {
+  const res = await fetch("/api/simulate/batch", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => null);
+    throw new Error(detail?.detail || `Batch simulation failed: ${res.status}`);
+  }
+  return res.json();
+}
+
 export async function fetchInsights(params: {
   subject_type?: string;
   persona_key?: string;

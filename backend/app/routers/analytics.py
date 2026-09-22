@@ -16,7 +16,7 @@ from fastapi import APIRouter, Query
 
 from .. import db
 from ..llm_gateway import LLMGatewayError, call_llm
-from ..zone_catalog import zone_lookup
+from ..zone_catalog import attention_relevant_zone_ids, zone_lookup
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 
@@ -103,7 +103,20 @@ def compare_real_vs_agent(
     real = db.aggregate_zone_stats(subject_type="real", variant_id=variant_id)
     agent = db.aggregate_zone_stats(subject_type="agent", persona_key=persona_key, variant_id=variant_id)
 
-    zone_ids = sorted({z["zone_id"] for z in real["zones"]} | {z["zone_id"] for z in agent["zones"]})
+    # Restrict the similarity comparison to zones that are actually
+    # "attention-relevant" (products/checkout/ad banners), excluding generic
+    # structural geometry (shelf frames, floor, etc.). A real shopper's
+    # calibration-based gaze estimate frequently raycasts against nearby
+    # structural meshes as noise/spillover while looking at a product; the
+    # AI persona's goal-directed navigation never targets structure at all
+    # (see personaNavigation.ts / simulation.py). Including structure would
+    # conflate "gaze-tracking imprecision" with "did the persona look at the
+    # same actionable things a human did" - the latter is what retail media
+    # measurement actually cares about.
+    relevant = attention_relevant_zone_ids()
+    zone_ids = sorted(
+        ({z["zone_id"] for z in real["zones"]} | {z["zone_id"] for z in agent["zones"]}) & relevant
+    )
     real_vector = _normalized_vector(real["zones"], zone_ids)
     agent_vector = _normalized_vector(agent["zones"], zone_ids)
 

@@ -64,6 +64,7 @@ everything else works without it).
 │ /api/personas    CRUD for persona library (personas.json)                                 │
 │ /api/sessions    create / batched events / end  →  SQLite (sessions, events)              │
 │ /api/analytics   zone stats, real-vs-agent compare (cosine/Pearson/top-N), insights        │
+│ /api/simulate    population-scale headless batch simulation (100s of shoppers in seconds) │
 │ /api/agent/gaze  optional vision-LLM narration (Luna) — best-effort, hard-timeout,         │
 │                  never blocks the deterministic simulation above                          │
 │ /api/model       serves convenience_store.glb                                             │
@@ -80,12 +81,14 @@ backend/
     db.py                 SQLite schema + session/event persistence + zone aggregation
     zone_catalog.py        Loads/merges store_layout.json + ad_zones.json into one lookup
     llm_gateway.py         Shared Azure LLM client, hard timeout + graceful fallback
+    simulation.py           Headless population-scale persona simulation engine
     schemas.py              Pydantic models (sessions, events, personas, calibration, agent)
     routers/
       store.py              GET /api/store/layout, /api/store/ad-zones
       personas.py            GET/POST/DELETE /api/personas
       sessions.py            POST /api/sessions, .../events, .../end; GET listing/detail
       analytics.py           GET /api/analytics/zones, /compare; POST /api/analytics/insights
+      simulate.py             POST /api/simulate/batch (population-scale headless simulation)
       agent.py                POST /api/agent/gaze (optional vision-LLM narration)
       calibration.py         GET/POST/DELETE eye-tracking calibration profiles
       model.py                GET /api/model -> convenience_store.glb
@@ -111,7 +114,8 @@ frontend/
       Interaction/                   Shopping cart state + HUD
       Agent/                         Persona setup form, deterministic navigation engine,
                                      simulation controller, optional LLM narration overlay
-      Dashboard/                     Analytics dashboard (zone attention, comparison, insights)
+      Dashboard/                     Analytics dashboard, floor-plan attention heatmap,
+                                     population-scale batch-simulation controls
       HUD/                           Controls, mode/variant selectors, status
 
 scripts/
@@ -307,6 +311,47 @@ no code changes needed to add a new consumer segment:
 }
 ```
 
+## Population-scale batch simulation
+
+The challenge is literally named *"Population-Scale Shopper Behavior"* - so
+beyond running one AI persona at a time in the 3D view, `POST
+/api/simulate/batch` runs **many** synthetic shoppers at once, headlessly (no
+browser/3D rendering at all).
+
+`backend/app/simulation.py` is a deliberate Python re-implementation of the
+exact same decision rules as the frontend's `personaNavigation.ts` (goal
+queue by `navigation_style`, persona-weighted dwell time, peripheral glance
+bias, price-sensitivity-adjusted purchase probability) - not a separate,
+special-cased data path. The insight that made this possible: the actual
+*decision* logic never needed the 3D renderer, only mapping a real human's
+gaze to a zone needs raycasting; for a synthetic persona we already know
+deterministically which zone it's "looking at" at each step. Locally this
+simulates **100 full shopper journeys, across every persona in the library,
+in ~1.3 seconds** - each producing the exact same `zone_dwell` /
+`product_interaction` / `purchase` / `navigation_sample` events (through the
+exact same `db.insert_events()`) as a real shopper or a manually-run agent, so
+they're fully comparable in the analytics endpoints below.
+
+From the Analytics dashboard, use the **"Population-scale simulation"** panel:
+pick a shopper count (up to 500) and which personas to sample from (evenly
+split across whatever's checked), click **Simulate**, and the real-vs-AI
+comparison metrics immediately recompute against that much larger, more
+statistically meaningful sample.
+
+> **Honest finding from doing this**: running 100 simulated shoppers against
+> a small real-shopper sample *lowered* the measured cosine similarity
+> compared to a single hand-run agent session (0.95 → ~0.51 in one local
+> test). That's not a bug - a single real session concentrates attention
+> narrowly on whatever that one person cared about, while a full persona
+> population (Mission Shoppers + Browsers + Loyalists + Switchers) naturally
+> spreads attention across the whole catalog. It's a real, useful research
+> finding: you need enough *real* panelists to fairly benchmark against a
+> representative synthetic population, not just one. The comparison also
+> deliberately excludes non-actionable structural geometry (shelf frames,
+> etc.) via `attention_relevant_zone_ids()` - a real shopper's calibration-based
+> gaze estimate frequently raycasts against nearby structural meshes as noise
+> while looking at a product, which would otherwise unfairly tank the score.
+
 ## 6. Analytics dashboard
 
 Click **View Insights Report** in the HUD to open the dashboard
@@ -317,10 +362,16 @@ Click **View Insights Report** in the HUD to open the dashboard
   zero-attention zones (answers "did shoppers look somewhere we put no ad?").
 - `GET /api/analytics/compare` — for a given persona + variant, computes
   **cosine similarity**, **Pearson correlation**, and **top-3 zone overlap**
-  between the real-shopper attention distribution and the AI persona's —
-  this is the "benchmark and quantify similarity" success criterion. Example
-  from a live local test run (11 real sessions vs. 1 agent session):
-  `cosine_similarity: 0.95`, `pearson_correlation: 0.999`, `top3_zone_overlap: 0.67`.
+  between the real-shopper attention distribution and the AI persona's,
+  restricted to attention-relevant zones (products/checkout/ads, excluding
+  structural geometry) — this is the "benchmark and quantify similarity"
+  success criterion. Also returns `per_zone` (real vs. agent share per zone),
+  which the dashboard's floor-plan heatmap plots directly.
+- The dashboard's **attention heatmap** (`AttentionHeatmap.tsx`) renders
+  every product/checkout/ad zone at its real (x, z) world position as a dot
+  sized/colored by dwell share, real shoppers and AI personas side by side on
+  the same floor plan — answers "which aisle did they look at, and where did
+  we put no ad" in one glance instead of reading a bar chart line by line.
 - `POST /api/analytics/insights` — an LLM-narrated summary of the above
   (branding/shelf-placement/ad-effectiveness recommendations), with a
   deterministic heuristic fallback (see below) when the LLM is unavailable —

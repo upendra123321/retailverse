@@ -133,3 +133,24 @@ class Persona(BaseModel):
 
 class PersonaListResponse(BaseModel):
     personas: List[Persona]
+
+
+# --- Population-scale batch simulation --------------------------------------
+
+MAX_BATCH_SIMULATION_COUNT = 500
+
+
+class BatchSimulateRequest(BaseModel):
+    count: int = Field(..., ge=1, le=MAX_BATCH_SIMULATION_COUNT)
+    persona_keys: Optional[List[str]] = Field(
+        default=None, description="Subset of persona_key values to sample from; omit/empty = whole library"
+    )
+    variant_id: Optional[str] = Field(default=None, max_length=64)
+
+
+class BatchSimulateResponse(BaseModel):
+    created: int
+    session_ids: List[str]
+    per_persona_counts: dict[str, int]
+    per_persona_purchase_sessions: dict[str, int]
+    elapsed_ms: float

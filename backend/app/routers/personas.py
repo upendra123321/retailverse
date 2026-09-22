@@ -16,7 +16,10 @@ from ..schemas import Persona, PersonaListResponse
 router = APIRouter(prefix="/api/personas", tags=["personas"])
 
 
-def _load() -> list[dict]:
+def load_personas() -> list[dict]:
+    """Public loader reused by the batch simulation engine (simulation.py) so
+    both the CRUD API and headless population-scale simulation always read
+    the same persona library, with no duplicated parsing logic."""
     if not PERSONAS_PATH.exists():
         return []
     data = json.loads(PERSONAS_PATH.read_text(encoding="utf-8"))
@@ -36,13 +39,13 @@ def _save(personas: list[dict]) -> None:
 
 @router.get("", response_model=PersonaListResponse)
 def list_personas() -> PersonaListResponse:
-    return PersonaListResponse(personas=[Persona.model_validate(p) for p in _load()])
+    return PersonaListResponse(personas=[Persona.model_validate(p) for p in load_personas()])
 
 
 @router.post("", response_model=Persona)
 def upsert_persona(persona: Persona) -> Persona:
     """Create or replace a custom persona by persona_key."""
-    personas = _load()
+    personas = load_personas()
     personas = [p for p in personas if p.get("persona_key") != persona.persona_key]
     personas.append(persona.model_dump())
     _save(personas)
@@ -51,7 +54,7 @@ def upsert_persona(persona: Persona) -> Persona:
 
 @router.delete("/{persona_key}")
 def delete_persona(persona_key: str) -> dict:
-    personas = _load()
+    personas = load_personas()
     remaining = [p for p in personas if p.get("persona_key") != persona_key]
     if len(remaining) == len(personas):
         raise HTTPException(status_code=404, detail="Persona not found")

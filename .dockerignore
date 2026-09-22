@@ -10,3 +10,9 @@ backend/data/calibration_profiles/*.json
 .env
 .git
 *.tsbuildinfo
+# Test-only, not needed to run the app (see backend/requirements-dev.txt)
+backend/tests
+backend/pytest.ini
+backend/requirements-dev.txt
+backend/.pytest_cache
+*.pptx

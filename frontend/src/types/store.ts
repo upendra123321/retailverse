@@ -22,6 +22,10 @@ export interface StoreLayout {
 
 export interface AdZoneVariant {
   variant_id: string;
+  /** "a" | "b" (or any shared key) - lets one global variant selection swap
+   * every slot's creative together; see resolveAbGroup()/pickSlotVariant()
+   * in session/zoneLookup.ts. */
+  ab_group?: string;
   label: string;
   position: [number, number, number];
   rotation_y_deg: number;
@@ -32,6 +36,9 @@ export interface AdZoneVariant {
 export interface AdSlot {
   slot_id: string;
   description: string;
+  /** "wall" (default) renders a flat wall-mounted banner; "billboard" also
+   * renders a support pole beneath the panel, for outdoor/open-space ads. */
+  mount?: "wall" | "billboard";
   size: { width: number; height: number };
   variants: AdZoneVariant[];
 }

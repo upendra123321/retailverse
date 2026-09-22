@@ -1,4 +1,4 @@
-import type { AdZonesConfig, StoreZone } from "../types/store";
+import type { AdSlot, AdZonesConfig, AdZoneVariant, StoreZone } from "../types/store";
 
 export interface ZoneLookup {
   meshNameToZoneId: Map<string, string>;
@@ -26,9 +26,43 @@ export function adBannerMeshName(variantId: string): string {
   return `ad-banner-${variantId}`;
 }
 
+/** Finds the ab_group ("a"/"b") of whichever slot's variant matches the
+ * globally-selected variantId (that selection is sourced from the FIRST ad
+ * slot only - see App.tsx). Every other slot then picks its own variant
+ * that shares that ab_group, so one control swaps every ad placement
+ * (indoor banner + outdoor billboard, etc.) together as one coherent
+ * strategy, while each placement keeps a unique zone_id for independent
+ * attention tracking.
+ */
+export function resolveAbGroup(config: AdZonesConfig, variantId: string | null): string | undefined {
+  for (const slot of config.ad_slots) {
+    const match = slot.variants.find((v) => v.variant_id === variantId);
+    if (match) return match.ab_group;
+  }
+  return undefined;
+}
+
+/** Picks the one variant to render/track for a given slot: prefer the
+ * shared ab_group match (see resolveAbGroup), then an exact variant_id
+ * match (the slot the selector itself came from), then just the first
+ * variant as a safe default.
+ */
+export function pickSlotVariant(
+  slot: AdSlot,
+  variantId: string | null,
+  abGroup?: string
+): AdZoneVariant | undefined {
+  if (abGroup) {
+    const byGroup = slot.variants.find((v) => v.ab_group === abGroup);
+    if (byGroup) return byGroup;
+  }
+  return slot.variants.find((v) => v.variant_id === variantId) ?? slot.variants[0];
+}
+
 export function activeAdVariants(config: AdZonesConfig, variantId: string | null) {
+  const abGroup = resolveAbGroup(config, variantId);
   return config.ad_slots
-    .map((slot) => slot.variants.find((v) => v.variant_id === variantId) ?? slot.variants[0])
+    .map((slot) => pickSlotVariant(slot, variantId, abGroup))
     .filter((v): v is NonNullable<typeof v> => Boolean(v));
 }
 

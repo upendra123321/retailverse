@@ -1,13 +1,16 @@
 {
-  "_comment": "Virtual ad banners overlaid on top of convenience_store.glb (the GLB itself has no ad creative). Positions are hand-placed in the store's world coordinates (see backend/data/store_layout.json store_bounds) to test the 'bonus' ask: does placement change how much attention an ad captures? Edit freely - these are NOT derived from the GLB.",
+  "_comment": "Virtual ad banners/billboards overlaid on top of convenience_store.glb (the GLB itself has no ad creative and, as of this file's last edit, no exterior geometry either - see StoreExterior.tsx for the procedurally-built parking lot + facade these outdoor billboards sit in). Positions are hand-placed in the store's world coordinates (see backend/data/store_layout.json store_bounds) to test the 'bonus' ask: does placement change how much attention an ad captures - now including *outdoor, open-space* placement, not just in-aisle. Edit freely - these are NOT derived from the GLB.",
+  "_ab_group_note": "Every variant carries an ab_group ('a' or 'b'). One global variant_id selection (driven by the FIRST slot's variant_id, which also doubles as the session-level 'variant_id' field) resolves to the matching ab_group in every other slot too - so picking 'A' swaps the indoor endcap banner AND the outdoor billboard together as one coherent placement strategy, while each physical placement still keeps its own unique zone_id for independent attention tracking. See resolveAbGroup()/pickSlotVariant() in frontend/src/session/zoneLookup.ts.",
   "ad_slots": [
     {
       "slot_id": "endcap_banner",
       "description": "Promotional banner - tests a high-traffic endcap placement (directly in the shopper's forward view from spawn, right above the cereal aisle) against a low-traffic back-corner placement.",
+      "mount": "wall",
       "size": { "width": 6, "height": 3 },
       "variants": [
         {
           "variant_id": "variant_a_high_traffic",
+          "ab_group": "a",
           "label": "Endcap banner - above cereal aisle (high-traffic)",
           "position": [1.5, 6.2, 9.3],
           "rotation_y_deg": 180,
@@ -16,11 +19,38 @@
         },
         {
           "variant_id": "variant_b_low_traffic",
+          "ab_group": "b",
           "label": "Back-corner banner (low-traffic control)",
           "position": [-22, 6, 17],
           "rotation_y_deg": 200,
           "creative_color": "#2b6cff",
           "creative_text": "SALE: Buy 2 Cereals, Get 1 Free!"
+        }
+      ]
+    },
+    {
+      "slot_id": "parking_lot_billboard",
+      "description": "Outdoor pylon billboard in the parking lot, facing the storefront entrance - tests the 'open space' ad placement bonus ask. Variant A is centered directly in the entrance sightline (high-traffic); variant B is off to the side near the lot's edge (low-traffic control), mirroring the same high/low-traffic contrast as the indoor endcap slot.",
+      "mount": "billboard",
+      "size": { "width": 8, "height": 4 },
+      "variants": [
+        {
+          "variant_id": "billboard_a_entrance_facing",
+          "ab_group": "a",
+          "label": "Parking lot billboard - centered on entrance sightline (high-traffic)",
+          "position": [1.8, 5.2, -28],
+          "rotation_y_deg": 0,
+          "creative_color": "#ff6b35",
+          "creative_text": "FreshMart: Buy 2 Cereals, Get 1 Free!"
+        },
+        {
+          "variant_id": "billboard_b_lot_edge",
+          "ab_group": "b",
+          "label": "Parking lot billboard - lot edge (low-traffic control)",
+          "position": [22, 5.2, -22],
+          "rotation_y_deg": -55,
+          "creative_color": "#2b6cff",
+          "creative_text": "FreshMart: Buy 2 Cereals, Get 1 Free!"
         }
       ]
     }

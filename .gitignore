@@ -13,3 +13,4 @@ backend/data/analytics.db-wal
 *.tsbuildinfo
 test.ipynb
 *.ipynb
+*.pptx

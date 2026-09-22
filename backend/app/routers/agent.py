@@ -17,6 +17,7 @@ import binascii
 import io
 import json
 import re
+import time
 
 from azure.ai.inference.models import (
     ImageContentItem,
@@ -25,15 +26,21 @@ from azure.ai.inference.models import (
     TextContentItem,
     UserMessage,
 )
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from PIL import Image
 
+from .. import db
 from ..llm_gateway import LLMGatewayError, get_client, get_settings, run_with_timeout
 from ..schemas import AgentFocus, AgentGazeRequest, AgentGazeResponse, AgentGridCell
+from ..security import actor_ref, rate_limit, sanitize_free_text
 
 router = APIRouter(prefix="/api/agent", tags=["agent"])
 
 MAX_IMAGE_DIMENSION = 1280
+
+# Two LLM calls per request (vision describe + judge) against a paid, shared
+# credential - the tightest budget of any endpoint in the app.
+_gaze_rate_limit = rate_limit("agent_gaze", max_calls=20, window_seconds=300)
 
 VISION_SYSTEM_PROMPT = (
     "You are Luna, a precise visual description assistant analyzing cropped sections of a single wide "
@@ -183,14 +190,33 @@ def _judge_focus(
     return index, reason
 
 
-@router.post("/gaze", response_model=AgentGazeResponse)
-def agent_gaze(request: AgentGazeRequest) -> AgentGazeResponse:
+@router.post("/gaze", response_model=AgentGazeResponse, dependencies=[_gaze_rate_limit])
+def agent_gaze(request: AgentGazeRequest, http_request: Request) -> AgentGazeResponse:
+    started = time.perf_counter()
     image = _decode_image(request.image_base64)
     raw_cells = _slice_grid(image, request.grid_rows, request.grid_cols)
+
+    # Defense-in-depth: persona_description is free text an end user typed
+    # into AgentSetupForm.tsx, and it flows straight into the judge LLM's
+    # prompt below. Strip/flag common instruction-override phrasing before
+    # it gets anywhere near the model (see security.sanitize_free_text for
+    # why this is a second layer, not the primary one).
+    persona_description, was_flagged = sanitize_free_text(request.persona_description)
+    if was_flagged:
+        db.record_audit(
+            action="prompt_injection_pattern_detected",
+            actor_ref=actor_ref(http_request),
+            result="sanitized",
+            detail={"shopper_name": request.shopper_name},
+        )
 
     try:
         descriptions = _describe_subimages(raw_cells)
     except LLMGatewayError as exc:
+        db.record_audit(
+            action="agent_gaze", actor_ref=actor_ref(http_request), result="error_vision",
+            detail={"error": str(exc)},
+        )
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     cells = [
@@ -205,12 +231,22 @@ def agent_gaze(request: AgentGazeRequest) -> AgentGazeResponse:
 
     try:
         focus_index, reason = _judge_focus(
-            request.persona_description, request.shopper_name, request.shopper_age, cells
+            persona_description, request.shopper_name, request.shopper_age, cells
         )
     except LLMGatewayError as exc:
+        db.record_audit(
+            action="agent_gaze", actor_ref=actor_ref(http_request), result="error_judge",
+            detail={"error": str(exc)},
+        )
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     focus_cell = next((cell for cell in cells if cell.index == focus_index), cells[0])
+    db.record_audit(
+        action="agent_gaze",
+        actor_ref=actor_ref(http_request),
+        result="ok",
+        detail={"elapsed_ms": round((time.perf_counter() - started) * 1000, 1), "prompt_flagged": was_flagged},
+    )
     return AgentGazeResponse(
         cells=cells,
         focus=AgentFocus(index=focus_cell.index, row=focus_cell.row, col=focus_cell.col, reason=reason),

@@ -10,15 +10,21 @@ actually measured.
 from __future__ import annotations
 
 import math
+import time
 from typing import Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request
 
 from .. import db
 from ..llm_gateway import LLMGatewayError, call_llm
+from ..security import actor_ref, rate_limit
 from ..zone_catalog import attention_relevant_zone_ids, zone_lookup
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
+
+# /insights is the one analytics endpoint that can call a paid, shared LLM
+# credential - budget it independently of the free/local zone/compare math.
+_insights_rate_limit = rate_limit("insights", max_calls=30, window_seconds=300)
 
 
 def _enrich_zones(zone_stats: list[dict]) -> list[dict]:
@@ -192,12 +198,14 @@ def _heuristic_insights(zones: list[dict], zero_attention: list[str], compare: O
     return "\n".join(lines)
 
 
-@router.post("/insights")
+@router.post("/insights", dependencies=[_insights_rate_limit])
 def generate_insights(
+    request: Request,
     subject_type: Optional[str] = Query(default=None),
     persona_key: Optional[str] = Query(default=None),
     variant_id: Optional[str] = Query(default=None),
 ) -> dict:
+    started = time.perf_counter()
     stats = db.aggregate_zone_stats(subject_type=subject_type, persona_key=persona_key, variant_id=variant_id)
     zones = _enrich_zones(stats["zones"])
     all_zone_ids = set(zone_lookup().keys())
@@ -237,6 +245,19 @@ def generate_insights(
         narrative = heuristic
         generated_by = "heuristic_fallback"
 
+    elapsed_ms = round((time.perf_counter() - started) * 1000, 1)
+    db.record_audit(
+        action="generate_insights",
+        actor_ref=actor_ref(request),
+        result=generated_by,
+        detail={
+            "subject_type": subject_type,
+            "persona_key": persona_key,
+            "variant_id": variant_id,
+            "zone_count": len(zones),
+            "elapsed_ms": elapsed_ms,
+        },
+    )
     return {
         "generated_by": generated_by,
         "narrative": narrative,

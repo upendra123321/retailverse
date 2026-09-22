@@ -6,7 +6,8 @@ from fastapi.staticfiles import StaticFiles
 
 from . import db
 from .config import FRONTEND_DEV_ORIGINS, FRONTEND_DIST_DIR
-from .routers import agent, analytics, calibration, model, personas, sessions, simulate, store
+from .routers import agent, analytics, audit, calibration, model, personas, sessions, simulate, store
+from .security import install_security_middleware
 
 app = FastAPI(
     title="Convenience Store Walkthrough API",
@@ -22,6 +23,9 @@ app.add_middleware(
     allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["*"],
 )
+# Defense-in-depth response headers (X-Frame-Options, camera-scoped
+# Permissions-Policy, etc.) - see security.py for rationale per header.
+install_security_middleware(app)
 
 
 @app.on_event("startup")
@@ -37,6 +41,7 @@ app.include_router(personas.router)
 app.include_router(sessions.router)
 app.include_router(analytics.router)
 app.include_router(simulate.router)
+app.include_router(audit.router)
 
 
 @app.get("/api/health")

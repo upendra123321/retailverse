@@ -1,62 +1,56 @@
 # RetailVerse — 5-Minute Pitch Script
 
-**Target length:** ~4:30–4:50 spoken at a natural pace (≈140–150 wpm, ~680 words).
-Slide numbers below match `RetailVerse_Pitch_Deck.pptx`. Bracketed notes are delivery cues, not to be read aloud.
+**Target length:** ~4:40–4:55 spoken at a natural pace (≈145–150 wpm, ~700 words).
+Slide numbers below match `RetailVerse_PopulationScaleShopperValidation_Pitch.pptx`
+(20 slides). This script deliberately touches every required pitch-video
+content point in order: **team intro → problem → solution → tech E2E →
+key features/innovation → impact/feasibility → call to action.**
+Bracketed notes are delivery cues, not to be read aloud.
 
 ---
 
-### [Slide 1 — Title] 0:00–0:20
-Quick question. Before an airline lets a pilot fly *your* plane, do they hand them the keys on day one?
+### [Slide 1 — Title] 0:00–0:15
+Quick question. Before an airline lets a pilot fly *your* plane, do they hand them the keys on day one? No — they put them in a flight simulator first, until it matches a real cockpit closely enough that everyone trusts it. That's the bet we made this weekend, except the pilots are shoppers and the cockpit is a grocery aisle. We built **RetailVerse**.
 
-No. They put them in a flight simulator first — hundreds of hours, every weather condition, every emergency — until the simulator's readings match a real cockpit closely enough that everyone trusts it.
+### [Slide 2 — Team Introduction] 0:15–0:30
+*[Replace with your real names/roles before recording]* I'm [Name], [role]. With me: [Name] on [role], [Name] on [role], and [Name] on [role]. Four of us, one weekend, one working end-to-end system.
 
-That's exactly the bet we made this weekend. Except instead of pilots, it's shoppers. And instead of a cockpit, it's a grocery aisle.
+### [Slide 3 — The Problem] 0:30–1:00
+Here's the problem retail brands actually have. Want to know if moving the cereal to eye-level sells more boxes, or if a parking-lot billboard even gets noticed? Today that means renting a store, recruiting panelists, strapping on eye-tracking headsets, and waiting weeks — for maybe thirty people. By the time the study comes back, the shelf's already been rearranged three times.
 
-We built **RetailVerse**.
+### [Slide 4 — Our Solution] 1:00–1:20
+So: what if the simulator came first? One browser-based 3D convenience store. Real humans shop in it with just a webcam and a keyboard. AI shopper personas shop in that *exact same* store on their own. Same shelves, same billboards, same metrics logged for both — and validated against each other, every time.
 
-### [Slide 2 — The Problem] 0:20–0:55
-Here's the problem retail brands actually have. Want to know if moving the cereal to eye-level sells more boxes? Want to know if a billboard by the parking lot even gets noticed? Today, that means renting a store, recruiting real panelists, strapping eye-tracking headsets on them, and waiting *weeks* for a report — for maybe thirty people.
+### [Slides 5–6 — Real shoppers + AI personas] 1:20–1:55
+Your webcam becomes the eye-tracker — 30-second calibration, then WASD through the aisles. Every glance, every pause, every item dropped in the basket gets logged. For the AI side, we didn't ask a chatbot to "pretend to be a shopper" — that's a coin flip you can't audit. Every persona is a rulebook instead: how directly they walk, how patient, how price-sensitive. Deterministic and replayable.
 
-By the time the study comes back, the shelf's already been rearranged three times. It's like designing a car and only being allowed to crash-test it *after* it's already on the road.
+### [Slide 7 — Agentic Quality] 1:55–2:20
+And this is a real agentic pipeline, not a chat window with extra steps: goal decomposition builds each persona's shopping list into an ordered target queue; a vision LLM and a judge LLM are two distinct, purpose-built tool calls with typed parameters; the same logic orchestrates a whole population at once; and every run ends in a measured, logged outcome — a number in the database, not just a plausible-sounding transcript.
 
-### [Slide 3 — Our Solution] 0:55–1:25
-So we asked: what if the flight simulator came first?
+### [Slide 8–9 — Population scale + A/B testing] 2:20–2:50
+Because it's rules, not roleplay, it's fast — headless, no browser, no GPU. A hundred full shopper journeys in about two seconds — a real panel size, on demand, for free. Point that at a real question: busy aisle or quiet one for the banner? Does the parking-lot billboard even get noticed before someone walks in? One toggle flips both placements, indoors and out, and we track attention on each.
 
-We built one browser-based 3D convenience store. Real humans shop in it using nothing but their webcam and a keyboard. And AI shopper personas — with their own personalities, patience, and price sensitivity — shop in that *exact same* store, on their own.
+### [Slide 10–11 — Validation & Business Value] 2:50–3:15
+We correlate AI results against real sessions — similarity scores, a heatmap comparing real and AI attention on the same floor plan. That's our actual measurable success indicator, not a nice-to-have chart. The target user: any retail or CPG insights team deciding shelf and ad spend before committing budget — and the path beyond this prototype is the same pipeline, scaled to a retailer's full store estate.
 
-Same building. Same shelves. Same billboards outside. Same metrics logged for both. That last part is the whole trick: we don't just *simulate* shoppers, we **validate** the simulation against real ones, every single time.
+### [Slides 12–15 — Tech, security & evidence] 3:15–3:45
+Under the hood: React and Three.js, FastAPI and SQLite, one Docker image, one HTTPS origin, because webcams need that. The LLM is optional seasoning for narration only. And because "trust us" isn't evidence: every LLM-backed endpoint is rate-limited, every consequential action is audit-logged, user text is screened for prompt injection — backed by 32 automated tests, passing in under a second, that you can run yourself.
 
-### [Slide 4–5 — Real + AI shoppers] 1:25–2:00
-Your webcam becomes the eye-tracker — a 30-second calibration, then WASD to walk the aisles. Every glance, every pause, every item dropped in the basket gets logged.
+### [Slide 16 — Challenges] 3:45–3:55
+We hit real potholes — a cross-platform install bug, an LLM call that once hung the UI — and every one got a real fix, not a band-aid.
 
-For the AI side, we didn't ask a chatbot to "pretend to be a shopper" — that's a coin flip you can't audit. Every persona is a rulebook instead: how directly they walk, how patient they are, how price-sensitive. Deterministic and replayable — a stunt double who's rehearsed the choreography, not an improv actor guessing.
+### [Slide 18–19 — Impact & Next Steps] 3:55–4:20
+What used to take weeks and a five-figure budget now takes minutes, in a browser tab, validated instead of assumed. We're upfront about what's not done — no user accounts yet, a simple pricing model — and just as clear on what's next: real accounts, richer surveys, and eventually this engine driving an AR headset instead of a browser tab, the long game this challenge asked for.
 
-### [Slide 6 — Population Scale] 2:00–2:25
-Because it's rules, not roleplay, it's fast — headless, no browser, no GPU. A hundred full shopper journeys, purchases and all, in about two seconds. That's the "population" in population-scale: a real panel size, on demand, for free.
-
-### [Slide 7 — A/B Testing] 2:25–2:50
-Point that at a real question: does the banner work better on the busy aisle or the quiet one? And since the challenge asked us to look *outside* the store — does the parking-lot billboard even get noticed before someone walks in? One toggle flips both placements, and we track attention on each.
-
-### [Slide 8–9 — Validation & Architecture] 2:50–3:35
-Here's the trust part: we don't just report AI numbers and hope you believe us. We correlate them against real sessions — similarity scores, a heatmap showing real attention next to AI attention on the same floor plan. If the simulator drifts from reality, you'll see it.
-
-Under the hood it's deliberately boring where it counts: React and Three.js for the store, FastAPI and SQLite underneath, one Docker image, one HTTPS origin, because webcams need that. An LLM is optional seasoning for narration — it never touches navigation or the numbers, and everything keeps working without it.
-
-### [Slide 11 — Challenges] 3:35–3:50
-We hit real potholes — a cross-platform install bug, a React dev-mode bug duplicating sessions, an LLM call that once hung the UI. Every one got a real fix, because a simulator you can't trust is worse than none.
-
-### [Slide 13–14 — Impact & Future] 3:50–4:15
-So: what used to take weeks and a five-figure budget now takes minutes, in a browser tab, validated instead of assumed. And it's just the runway — natural-language personas, richer surveys, and eventually this same engine driving an AR headset instead of a browser tab, which was the long game this challenge asked for.
-
-### [Slide 15 — Close] 4:15–4:30
-Pilots don't fly blind. Retailers shouldn't guess blind either. We built the simulator — real shoppers, AI shoppers, one validated truth.
-
-Thank you — happy to take it for a spin.
+### [Slide 20 — Close] 4:35–4:50
+Pilots don't fly blind. Retailers shouldn't guess blind either. We built the simulator — real shoppers, AI shoppers, one validated truth. Try it yourself at the link on screen — thank you.
 
 ---
 
 ## Delivery tips
-- **Pace:** the flight-simulator line at the start and the "one validated truth" line at the end are your bookends — say them slower and let them land.
-- **If you're running long:** cut the Slide 11 (Challenges) beat entirely — judges rarely dock points for skipping it, and it's the easiest 20 seconds to lose.
-- **If you're running short:** expand Slide 8 (validation) with a concrete number from your own live dashboard run (e.g., the actual similarity score or "100 shoppers in 2 seconds" if it's on screen).
-- **Live demo fallback:** if the projector/webcam fails, the screenshots baked into slides 4–8 and 12 are real captures from an actual run — you can present entirely from the deck with zero risk.
+- **Bookends:** the flight-simulator line at the start and "one validated truth" at the end — say these slower, let them land.
+- **Before recording:** fill in real names/roles on Slide 2, and swap the GitHub link on Slide 20 if it's changed.
+- **If running long:** cut the Challenges beat (Slide 16) — easiest 15 seconds to lose.
+- **If running short:** expand Slide 10 with a live number from your own dashboard run (actual cosine similarity score, or "100 shoppers in 2 seconds" if it's on screen).
+- **Live demo fallback:** the screenshots baked into slides 5, 8–10, and 17 are real captures from an actual run — you can present entirely from the deck with zero risk if the live demo or webcam fails.
+- **Recording:** use Microsoft Teams with the official Hackfest background image (swap in once you have the actual file — see the note in this repo's chat history about the template/background links).

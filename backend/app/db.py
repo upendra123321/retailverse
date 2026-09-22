@@ -61,6 +61,22 @@ CREATE INDEX IF NOT EXISTS idx_events_type ON events(event_type);
 CREATE INDEX IF NOT EXISTS idx_events_zone ON events(zone_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_variant ON sessions(variant_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_subject ON sessions(subject_type, persona_key);
+
+-- Audit trail for consequential/administrative actions (persona library
+-- edits, batch-simulation runs, LLM-backed insight/gaze calls). Required by
+-- the Responsible AI & Security evaluation dimension ("retain an audit
+-- trail"). actor_ref is a truncated hash of the caller's IP, never the raw
+-- IP, so this table itself stays privacy-minimal.
+CREATE TABLE IF NOT EXISTS audit_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    action TEXT NOT NULL,
+    actor_ref TEXT NOT NULL,
+    result TEXT NOT NULL,
+    detail_json TEXT NOT NULL DEFAULT '{}'
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_log(action);
 """
 
 
@@ -338,3 +354,33 @@ def aggregate_zone_stats(
         )
 
     return {"session_count": session_count, "zones": zones}
+
+
+def record_audit(*, action: str, actor_ref: str, result: str, detail: Optional[dict[str, Any]] = None) -> None:
+    """Append one audit-trail entry. Called from routers for every
+    consequential/administrative action (persona create/delete, batch
+    simulation runs, LLM-backed insight/gaze calls) - see security.py's
+    module docstring and SECURITY.md for the full rationale."""
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO audit_log (ts, action, actor_ref, result, detail_json) VALUES (?, ?, ?, ?, ?)",
+            (now_iso(), action, actor_ref, result, json.dumps(detail or {})),
+        )
+
+
+def list_audit(*, limit: int = 100) -> list[dict]:
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT ts, action, actor_ref, result, detail_json FROM audit_log ORDER BY id DESC LIMIT ?",
+            (min(limit, 500),),
+        ).fetchall()
+    return [
+        {
+            "ts": r["ts"],
+            "action": r["action"],
+            "actor_ref": r["actor_ref"],
+            "result": r["result"],
+            "detail": json.loads(r["detail_json"] or "{}"),
+        }
+        for r in rows
+    ]

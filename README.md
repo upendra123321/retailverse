@@ -19,6 +19,29 @@ challenge.
 - Supports A/B ad-placement variants so you can compare attention/engagement
   across store layouts.
 
+## Quick start (TL;DR for teammates)
+
+```bash
+git clone https://github.com/upendra123321/retailverse.git
+cd retailverse
+
+# macOS / Linux
+python3 scripts/setup.py && python3 scripts/dev.py
+
+# Windows (PowerShell or cmd)
+py -3.12 scripts\setup.py
+py scripts\dev.py
+```
+
+Then open **http://localhost:5173**. That's it — one script installs
+everything (backend venv, Python deps, frontend `npm install`, generates the
+store's zone/product catalog from the GLB), the other launches both the
+backend (`:8000`) and frontend (`:5173`) together. See
+[Prerequisites](#prerequisites-macos-and-windows) below if `python3`/`py` or
+`node` aren't installed yet, and [Setup](#2-one-command-setup-macos-windows-linux--identical)
+for what to do about the `.env` file (only needed for optional LLM features —
+everything else works without it).
+
 ## Architecture
 
 ```
@@ -121,8 +144,13 @@ Dockerfile / render.yaml       Single-origin production build + Render one-click
 
 ## 1. Get the code
 
-Unzip/copy this folder (or clone the repo) onto your machine, then open a
-terminal in the project root (the folder containing this `README.md`).
+```bash
+git clone https://github.com/upendra123321/retailverse.git
+cd retailverse
+```
+
+(Or `git pull` if you already have it cloned.) Open a terminal in the project
+root — the folder containing this `README.md` — for every command below.
 
 ## 2. One-command setup (macOS, Windows, Linux — identical)
 

@@ -8,6 +8,8 @@ frontend/dist/
 
 backend/data/calibration_profiles/*.json
 backend/data/analytics.db
+backend/data/analytics.db-shm
+backend/data/analytics.db-wal
 *.tsbuildinfo
 test.ipynb
 *.ipynb

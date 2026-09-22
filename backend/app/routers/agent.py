@@ -1,4 +1,17 @@
-"""Agent Mode: simulated shopper gaze driven by a vision LLM + judge LLM."""
+"""Agent Mode narration (optional, cosmetic only): a vision LLM describes
+what's on screen and a judge LLM guesses which region a persona would look
+at, purely to produce HUD flavor text + an audit-trail "reason" string.
+
+This endpoint does NOT drive the agent's actual movement or the gaze
+coordinates that get logged as zone_dwell/product_interaction events - that
+is 100% deterministic, persona-driven logic in
+frontend/src/components/Agent/personaNavigation.ts (see
+AgentSimulationController.tsx and useAgentSimulation.ts for how the two are
+kept separate). If this endpoint times out, errors, or returns a malformed/
+out-of-range index, the caller (useAgentSimulation.ts) just drops the
+narration for that tick and the simulation continues identically - nothing
+here can corrupt movement, analytics, or purchase decisions.
+"""
 import base64
 import binascii
 import io

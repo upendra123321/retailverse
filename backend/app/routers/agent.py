@@ -16,6 +16,7 @@ import base64
 import binascii
 import io
 import json
+import os
 import re
 import time
 
@@ -41,6 +42,17 @@ MAX_IMAGE_DIMENSION = 1280
 # Two LLM calls per request (vision describe + judge) against a paid, shared
 # credential - the tightest budget of any endpoint in the app.
 _gaze_rate_limit = rate_limit("agent_gaze", max_calls=20, window_seconds=300)
+
+# Narration is provably non-critical (see this module's docstring - it never
+# drives movement/analytics), so it gets its own, much shorter timeout than
+# the default LLM_TIMEOUT_SECONDS (used by insights, a deliberate one-off
+# user action where waiting longer for a better answer is worth it). Two
+# sequential calls happen per request (vision describe, then judge) and this
+# endpoint is polled on an interval by the frontend - a 15s-per-call timeout
+# means the HUD can appear stuck on "Narrating..." for up to 30s per tick
+# when the LLM is unreachable. 5s keeps that snappy while still being
+# generous for a *reachable* LLM's normal response time.
+NARRATION_TIMEOUT_SECONDS = float(os.getenv("AGENT_NARRATION_TIMEOUT_SECONDS", "5"))
 
 VISION_SYSTEM_PROMPT = (
     "You are Luna, a precise visual description assistant analyzing cropped sections of a single wide "
@@ -137,7 +149,8 @@ def _describe_subimages(cells: list[dict]) -> dict[int, str]:
             messages=[SystemMessage(content=VISION_SYSTEM_PROMPT), UserMessage(content=content)],
             model=settings.model,
             headers={"Authorization": settings.api_key},
-        )
+        ),
+        timeout_seconds=NARRATION_TIMEOUT_SECONDS,
     )
     raw = response.choices[0].message.content or ""
 
@@ -174,7 +187,8 @@ def _judge_focus(
             ],
             model=settings.model,
             headers={"Authorization": settings.api_key},
-        )
+        ),
+        timeout_seconds=NARRATION_TIMEOUT_SECONDS,
     )
     raw = response.choices[0].message.content or ""
 

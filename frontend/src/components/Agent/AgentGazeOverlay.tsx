@@ -47,7 +47,11 @@ export function AgentGazeOverlay({ config, focus, isThinking, error, onStop }: P
           navigation: {config.persona.navigation_style} · variant: {config.variantId}
         </p>
         <p>{isThinking ? "Narrating…" : focus ? focus.reason : "Deterministic persona simulation running — narration optional."}</p>
-        {error && <p className="agent-hud-error">LLM narration: {error}</p>}
+        {error && (
+          <p className="agent-hud-error">
+            Narration unavailable (LLM unreachable) — persona movement continues normally.
+          </p>
+        )}
         <button onClick={onStop}>Stop Simulation</button>
       </div>
     </div>

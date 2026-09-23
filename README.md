@@ -15,11 +15,86 @@ challenge.
   interaction, purchase, navigation path, ad views) into one SQLite store.
 - An analytics API/dashboard aggregates attention per zone, computes
   real-vs-synthetic similarity (cosine similarity, Pearson correlation,
-  top-N zone overlap), and generates automated insight narratives.
+  top-N zone overlap), renders a canvas heatmap, and generates automated
+  (LLM or heuristic) insight narratives — including a natural-language
+  "ask the data" Q&A box.
 - Supports A/B ad-placement variants so you can compare attention/engagement
   across store layouts.
 
-## Quick start (TL;DR for teammates)
+## Contents
+
+- [Quick start — Docker (no installs needed)](#quick-start--docker-no-installs-needed)
+- [Quick start — native dev (hot reload)](#quick-start--native-dev-hot-reload)
+- [Architecture](#architecture)
+- [Project structure](#project-structure)
+- [Using the app: real shopper](#using-the-app-real-shopper)
+- [Using the app: AI persona shopper](#using-the-app-ai-persona-shopper)
+- [Population-scale batch simulation](#population-scale-batch-simulation)
+- [Access control (opt-in)](#access-control-opt-in)
+- [Analytics dashboard](#analytics-dashboard)
+- [Deployment](#deployment)
+- [Responsible AI & security](#responsible-ai--security)
+- [Testing](#testing)
+- [Known limitations & roadmap](#known-limitations--roadmap)
+
+---
+
+## Quick start — Docker (no installs needed)
+
+The simplest way to run the whole app — no Python, no Node, no local
+dependency installs. Requires only [Docker Desktop](https://www.docker.com/products/docker-desktop/).
+
+```bash
+git clone https://github.com/upendra123321/retailverse.git
+cd retailverse
+cp .env.example .env        # creates the file the container reads env vars from
+
+docker build -t retailverse .
+docker run -p 8000:8000 --env-file .env retailverse
+```
+
+Open **http://localhost:8000**. One container, one port — the image builds
+the frontend and serves it from the same FastAPI process that serves the
+API, so there's nothing else to configure.
+
+> - `cp .env.example .env` is required even if you don't have a real LLM key
+>   — `docker run --env-file .env` needs the file to exist. Every feature
+>   works fine with the placeholder values (see
+>   [LLM failure handling](#llm-failure-handling--graceful-degradation)); only
+>   LLM narration/insights/"ask the data"/persona-suggest need a real
+>   `LITE_LLM_API_KEY` to call an actual model instead of falling back.
+> - Webcam eye tracking works fine over plain `http://localhost:8000` —
+>   browsers treat `localhost` as a secure context regardless of protocol.
+> - To stop it: `Ctrl+C`, or `docker ps` + `docker stop <container>`.
+> - Rebuilding after you change code: re-run the same `docker build` command
+>   (Docker layer-caches unchanged steps, so repeat builds are fast).
+
+## Quick start — native dev (hot reload)
+
+Prefer this if you're actively developing (instant hot-reload on save,
+no rebuilding a container per change).
+
+<details>
+<summary><strong>Prerequisites</strong> (click to expand)</summary>
+
+- **Python 3.10+ (3.12 recommended)** — `python3 --version` (macOS/Linux) or
+  `py --version` (Windows). Azure SDK deps (`azure-core`) require 3.10+; if
+  you only have 3.9, install a newer Python first (macOS:
+  `brew install python@3.12`; Windows: `winget install Python.Python.3.12`
+  or the python.org installer).
+- **Node.js 18+** (v20/v22 verified) — `node --version`. Get it from
+  [nodejs.org](https://nodejs.org) or `winget install OpenJS.NodeJS.LTS` on
+  Windows.
+- A webcam, and Chrome or Edge (recommended for MediaPipe WebGL support).
+
+> ⚠️ **Do not copy someone else's `.env`, `.venv/`, or `frontend/node_modules/`
+> folder between machines/OSes.** `.env` contains a private API key (never
+> share/commit it). `.venv/` is Python-version-specific.
+> `node_modules/` contains OS/CPU-architecture-specific native binaries
+> (e.g. Rollup/esbuild) — copying it from a Mac to Windows (or Intel to Apple
+> Silicon) fails with a cryptic `Cannot find module @rollup/rollup-<arch>`
+> error. Everyone should run their own setup below.
+</details>
 
 ```bash
 git clone https://github.com/upendra123321/retailverse.git
@@ -33,14 +108,48 @@ py -3.12 scripts\setup.py
 py scripts\dev.py
 ```
 
-Then open **http://localhost:5173**. That's it — one script installs
-everything (backend venv, Python deps, frontend `npm install`, generates the
-store's zone/product catalog from the GLB), the other launches both the
-backend (`:8000`) and frontend (`:5173`) together. See
-[Prerequisites](#prerequisites-macos-and-windows) below if `python3`/`py` or
-`node` aren't installed yet, and [Setup](#2-one-command-setup-macos-windows-linux--identical)
-for what to do about the `.env` file (only needed for optional LLM features —
-everything else works without it).
+Then open **http://localhost:5173**. One script installs everything
+(backend venv, Python deps, frontend `npm install`, generates the store's
+zone/product catalog from the GLB), the other launches both the backend
+(`:8000`) and frontend (`:5173`) together, with hot reload on both sides.
+
+After setup, edit the generated `.env` and set `LITE_LLM_API_KEY` to a real
+key if you have one (ask a teammate — never commit your own `.env`).
+Everything except LLM narration/insights/"ask the data"/persona-suggest
+works fine without one. There's also **no login screen by default** — see
+[Access control](#access-control-opt-in) if you want to add one.
+
+<details>
+<summary>What the setup script does / manual equivalent</summary>
+
+1. Creates `./.venv` using whichever Python you invoked it with.
+2. `pip install -r backend/requirements.txt` into that venv.
+3. Copies `.env.example` → `.env` if missing.
+4. `npm install` in `frontend/`.
+5. Regenerates `backend/data/store_layout.json` from `convenience_store.glb`.
+
+Re-run any time; every step is safe to repeat.
+</details>
+
+<details>
+<summary>Running backend/frontend separately (manual equivalent)</summary>
+
+**Terminal 1 — backend API:**
+
+```bash
+# macOS/Linux
+.venv/bin/python -m uvicorn backend.app.main:app --reload --port 8000
+# Windows
+.venv\Scripts\python.exe -m uvicorn backend.app.main:app --reload --port 8000
+```
+
+**Terminal 2 — frontend dev server:**
+
+```bash
+cd frontend
+npm run dev
+```
+</details>
 
 ## Architecture
 
@@ -49,10 +158,10 @@ everything else works without it).
 │  React + Three.js (@react-three/fiber)                                                    │
 │  ┌───────────────────────┐   ┌─────────────────────────┐   ┌───────────────────────────┐ │
 │  │ Real-shopper mode      │   │ Agent (persona) mode     │   │ Analytics dashboard        │ │
-│  │ - MediaPipe iris gaze  │   │ - personaNavigation.ts   │   │ - zone attention bars      │ │
+│  │ - MediaPipe iris gaze  │   │ - personaNavigation.ts   │   │ - zone attention heatmap   │ │
 │  │   (on-device, no video │   │   goal queue + dwell     │   │ - real vs. agent similarity│ │
 │  │   leaves the browser)  │   │   time + glance bias     │   │ - LLM/heuristic insights   │ │
-│  │ - WASD + mouse look    │   │ - state machine: seek →  │   │                            │ │
+│  │ - WASD + mouse look    │   │ - state machine: seek →  │   │ - "ask the data" LLM Q&A   │ │
 │  │ - crosshair raycast →  │   │   dwell → next target    │   │                            │ │
 │  │   add-to-cart          │   │ - optional LLM narration │   │                            │ │
 │  └──────────┬─────────────┘   └──────────┬───────────────┘   └──────────┬─────────────────┘ │
@@ -74,10 +183,13 @@ everything else works without it).
 ```
 
 Every router above except `/api/auth` itself sits behind an opt-in
-`require_auth` dependency (§ [Access control](#access-control-opt-in)) —
+`require_auth` dependency (see [Access control](#access-control-opt-in)) —
 a no-op until an operator sets `APP_ACCESS_CODE`.
 
 ## Project structure
+
+<details>
+<summary>Click to expand full backend/frontend/scripts layout</summary>
 
 ```
 backend/
@@ -151,101 +263,9 @@ Dockerfile / render.yaml       Single-origin production build + Render one-click
 SECURITY.md                    Security & Responsible AI controls, mapped to real files + tests
 PITCH_SCRIPT.md                5-minute pitch script for the demo video
 ```
-
-## Prerequisites (macOS AND Windows)
-
-- **Python 3.10+ (3.12 recommended)** — `python3 --version` (macOS/Linux) or `py --version` (Windows).
-  Azure SDK deps (`azure-core`) require 3.10+; if you only have 3.9, install a newer
-  Python first (macOS: `brew install python@3.12`; Windows: `winget install Python.Python.3.12`
-  or python.org installer).
-- **Node.js 18+** (v20/v22 verified) — `node --version`. Get it from
-  [nodejs.org](https://nodejs.org) or `winget install OpenJS.NodeJS.LTS` on Windows.
-- A webcam, and Chrome or Edge (recommended for MediaPipe WebGL support).
-
-> ⚠️ **Do not copy someone else's `.env`, `.venv/`, or `frontend/node_modules/`
-> folder between machines/OSes.** `.env` contains a private API key (never
-> share/commit it). `.venv/` is Python-version- and OS-specific.
-> `node_modules/` contains OS/CPU-architecture-specific native binaries
-> (e.g. Rollup/esbuild) — copying it from a Mac to Windows (or Intel to Apple
-> Silicon) fails with a cryptic `Cannot find module @rollup/rollup-<arch>`
-> error. Everyone should run their own setup below.
-
-## 1. Get the code
-
-```bash
-git clone https://github.com/upendra123321/retailverse.git
-cd retailverse
-```
-
-(Or `git pull` if you already have it cloned.) Open a terminal in the project
-root — the folder containing this `README.md` — for every command below.
-
-## 2. One-command setup (macOS, Windows, Linux — identical)
-
-```bash
-# macOS / Linux
-python3 scripts/setup.py
-
-# Windows (PowerShell or cmd)
-py -3.12 scripts\setup.py
-```
-
-Then edit the generated `.env` and set `LITE_LLM_API_KEY` to a valid key (ask
-a teammate — do not reuse a key you find committed anywhere, and never commit
-your own `.env`). Everything except the optional **LLM narration/insights/
-"ask the data"/persona-suggest** features works fine without a real key —
-see
-[Responsible AI: LLM failure handling](#llm-failure-handling--graceful-degradation).
-
-By default there is **no login screen** — leave `APP_ACCESS_CODE` unset in
-`.env` for local dev. See [Access control (opt-in)](#access-control-opt-in)
-if you want to put a passcode on a hosted demo URL.
-
-<details>
-<summary>What the setup script does / manual equivalent</summary>
-
-1. Creates `./.venv` using whichever Python you invoked it with.
-2. `pip install -r backend/requirements.txt` into that venv.
-3. Copies `.env.example` → `.env` if missing.
-4. `npm install` in `frontend/`.
-5. Regenerates `backend/data/store_layout.json` from `convenience_store.glb`.
-
-Re-run any time; every step is safe to repeat.
 </details>
 
-## 3. Launch the app (macOS, Windows, Linux — identical)
-
-```bash
-# macOS / Linux
-python3 scripts/dev.py
-
-# Windows
-py scripts\dev.py
-```
-
-Then open **http://localhost:5173** in Chrome or Edge.
-
-<details>
-<summary>Running backend/frontend separately (manual equivalent)</summary>
-
-**Terminal 1 — backend API:**
-
-```bash
-# macOS/Linux
-.venv/bin/python -m uvicorn backend.app.main:app --reload --port 8000
-# Windows
-.venv\Scripts\python.exe -m uvicorn backend.app.main:app --reload --port 8000
-```
-
-**Terminal 2 — frontend dev server:**
-
-```bash
-cd frontend
-npm run dev
-```
-</details>
-
-## 4. Using the app (real shopper)
+## Using the app: real shopper
 
 1. **Allow camera access** when prompted — MediaPipe FaceLandmarker runs
    entirely in-browser via WebAssembly; **no video frame is ever sent to the
@@ -264,13 +284,14 @@ npm run dev
 Every dwell/interaction/purchase/navigation sample is logged to a session
 tied to `subject_type = "real"` and the selected `variant_id`.
 
-## 5. Using the app (AI persona shopper)
+## Using the app: AI persona shopper
 
 Click **Agent Mode** in the HUD, pick a persona from the library (Mission
 Shopper, Browser, Brand Loyalist, Switcher) or define a custom one, choose an
 ad variant, and click **Start Simulation**.
 
-### How persona-driven navigation works (the differentiator)
+<details>
+<summary><strong>How persona-driven navigation works</strong> (the differentiator — click to expand)</summary>
 
 This is **not** an LLM chat loop deciding every step — that would be slow,
 non-repeatable, and hard to audit. Instead, `personaNavigation.ts` +
@@ -307,6 +328,7 @@ non-repeatable, and hard to audit. Instead, `personaNavigation.ts` +
    `zone_dwell` / `product_interaction` / `purchase` / `navigation_sample`
    events, through the exact same `/api/sessions/*` endpoints, as a real
    shopper — this is what makes real-vs-synthetic comparison apples-to-apples.
+</details>
 
 ### Optional LLM narration layer
 
@@ -379,19 +401,23 @@ split across whatever's checked), click **Simulate**, and the real-vs-AI
 comparison metrics immediately recompute against that much larger, more
 statistically meaningful sample.
 
-> **Honest finding from doing this**: running 100 simulated shoppers against
-> a small real-shopper sample *lowered* the measured cosine similarity
-> compared to a single hand-run agent session (0.95 → ~0.51 in one local
-> test). That's not a bug - a single real session concentrates attention
-> narrowly on whatever that one person cared about, while a full persona
-> population (Mission Shoppers + Browsers + Loyalists + Switchers) naturally
-> spreads attention across the whole catalog. It's a real, useful research
-> finding: you need enough *real* panelists to fairly benchmark against a
-> representative synthetic population, not just one. The comparison also
-> deliberately excludes non-actionable structural geometry (shelf frames,
-> etc.) via `attention_relevant_zone_ids()` - a real shopper's calibration-based
-> gaze estimate frequently raycasts against nearby structural meshes as noise
-> while looking at a product, which would otherwise unfairly tank the score.
+<details>
+<summary>Honest finding from doing this (click to expand)</summary>
+
+Running 100 simulated shoppers against a small real-shopper sample *lowered*
+the measured cosine similarity compared to a single hand-run agent session
+(0.95 → ~0.51 in one local test). That's not a bug - a single real session
+concentrates attention narrowly on whatever that one person cared about,
+while a full persona population (Mission Shoppers + Browsers + Loyalists +
+Switchers) naturally spreads attention across the whole catalog. It's a
+real, useful research finding: you need enough *real* panelists to fairly
+benchmark against a representative synthetic population, not just one. The
+comparison also deliberately excludes non-actionable structural geometry
+(shelf frames, etc.) via `attention_relevant_zone_ids()` - a real shopper's
+calibration-based gaze estimate frequently raycasts against nearby
+structural meshes as noise while looking at a product, which would
+otherwise unfairly tank the score.
+</details>
 
 ## Access control (opt-in)
 
@@ -414,7 +440,7 @@ for the full rationale and the exact HMAC-signed-cookie mechanism. Also set
 `APP_SECRET_KEY` in production (Render's `render.yaml` already auto-generates
 this) so sessions survive backend restarts instead of resetting.
 
-## 6. Analytics dashboard
+## Analytics dashboard
 
 Click **View Insights Report** in the HUD to open the dashboard
 (`AnalyticsDashboard.tsx`), which calls:
@@ -457,7 +483,8 @@ Click **View Insights Report** in the HUD to open the dashboard
   unavailable or its output looks suspicious. Try: *"Which zone underperforms
   for the Browser persona?"* or *"Are there any blind spots?"*
 
-## Store layout & attention zones
+<details>
+<summary>Store layout & attention zones (click to expand)</summary>
 
 `scripts/extract_store_layout.py` parses `convenience_store.glb`, groups mesh
 nodes into physical product instances, and applies a curated catalog to
@@ -467,8 +494,10 @@ each zone lets the frontend map a raycast hit straight back to a `zone_id`.
 `backend/data/ad_zones.json` defines A/B ad banner placements/creatives
 layered on top; `frontend/src/session/zoneLookup.ts` merges both into one
 mesh-name → `zone_id` lookup used by every raycaster in the scene.
+</details>
 
-## How the eye tracking works
+<details>
+<summary>How the eye tracking works (click to expand)</summary>
 
 - MediaPipe's `FaceLandmarker` (via `@mediapipe/tasks-vision`, loaded from its
   official CDN model/WASM assets) detects 478 face landmarks per frame,
@@ -491,36 +520,29 @@ mesh-name → `zone_id` lookup used by every raycaster in the scene.
 **Tips for best accuracy**: calibrate in the same lighting/seating position
 you'll navigate in, keep your head reasonably still after calibrating, and
 recalibrate if you change position or lighting.
+</details>
 
 ## Deployment
 
 The app is built to run as **one process on one HTTPS origin** — this matters
 because browsers refuse `getUserMedia` (webcam) on insecure/mixed-origin
 contexts, so a "frontend on domain A, API on domain B" split would break real
-gaze tracking on anything but `localhost`.
-
-```bash
-# 1. Build the frontend once:
-cd frontend && npm run build && cd ..
-# 2. Run the backend - it now also serves frontend/dist/ at "/":
-.venv/bin/python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000
-```
-
-Open `http://<host>:8000/` — same origin serves the SPA, the GLB model, and
-every `/api/*` route. (`FRONTEND_DIST_DIR` in `backend/app/config.py`; see
-`main.py`'s static-file mount, a no-op until `frontend/dist` exists.)
+gaze tracking on anything but `localhost`. Locally, the
+[Docker quick start](#quick-start--docker-no-installs-needed) above already
+does exactly this in one container; the same image is what gets deployed.
 
 ### Recommended: Render.com (free, least setup)
 
-A `Dockerfile` (multi-stage: builds the frontend, then a slim Python 3.12
-runtime) and `render.yaml` blueprint are included.
+The same `Dockerfile` (multi-stage: builds the frontend, then a slim Python
+3.12 runtime) and a `render.yaml` blueprint are included.
 
-1. Push this repo to GitHub (see [Getting this into git](#getting-this-into-git)).
+1. Push this repo to GitHub.
 2. In the [Render dashboard](https://dashboard.render.com), **New +** →
    **Blueprint**, point it at the repo — it reads `render.yaml` and builds
    the `Dockerfile` automatically.
 3. Set the `LITE_LLM_*` env vars in the Render dashboard (marked `sync: false`
-   in the blueprint so they're never committed).
+   in the blueprint so they're never committed). Optionally set
+   `APP_ACCESS_CODE` too — see [Access control](#access-control-opt-in).
 4. You get a free `https://<name>.onrender.com` URL — HTTPS included, so
    webcam gaze tracking works out of the box.
 
@@ -529,7 +551,8 @@ runtime) and `render.yaml` blueprint are included.
 also sleep after ~15 min idle (30–60s cold-start on the next request) — wake
 it a minute before a live demo, or upgrade the instance for the actual slot.
 
-### Alternative: your AWS account (bonus, same Dockerfile)
+<details>
+<summary>Alternative: your AWS account (bonus, same Dockerfile)</summary>
 
 The same image deploys to **AWS App Runner** (point it at an ECR image or a
 connected GitHub repo — closest to Render's zero-ops model, automatic HTTPS)
@@ -547,13 +570,7 @@ GLB/static assets behind **CloudFront** for latency.
 > has VPN/network access into NIQ's corporate network. This does not block the
 > core success criteria — attention tracking, persona navigation, and
 > real-vs-synthetic comparison do not depend on the LLM at all.
-
-### Getting this into git
-
-This folder is now a local git repo (`git init` already run, `.env` and the
-SQLite DB are gitignored). To push it to a remote for your team / for
-Render's git-based deploy, either use GitHub directly, or ask this assistant
-to run the `share`/`new-repo` skill to push a Cursor-hosted copy.
+</details>
 
 ## Responsible AI & security
 
@@ -567,15 +584,15 @@ Short version, mapped to the challenge's evaluation rubric:
 - **Credential handling**: the LLM API key lives only in a local, gitignored
   `.env` (see `.env.example`); read server-side only, never echoed to the
   client. Render/App Runner env vars are `sync: false`, never committed.
-- **Rate limiting**: every LLM-backed endpoint (including the newer "ask the
-  data" and persona-suggest ones), plus batch simulation and persona writes
-  and the login endpoint itself, has a per-IP sliding-window budget
-  (`backend/app/security.py`) — a public URL with a shared LLM credential
-  and no login otherwise has no abuse ceiling.
 - **Access control**: an opt-in, single-shared-passcode gate
   (`APP_ACCESS_CODE`) protects a hosted demo URL via an HMAC-signed httpOnly
   session cookie — a no-op until explicitly configured, so local dev and
   grading stay frictionless. See [Access control](#access-control-opt-in).
+- **Rate limiting**: every LLM-backed endpoint (including "ask the data" and
+  persona-suggest), plus batch simulation, persona writes, and the login
+  endpoint itself, has a per-IP sliding-window budget
+  (`backend/app/security.py`) — a public URL with a shared LLM credential
+  and no login otherwise has no abuse ceiling.
 - **Audit trail**: every persona edit, batch-simulation run, insight
   generation, "ask the data" query, and persona-suggestion (each labeled
   `llm` vs `heuristic_fallback`), agent-mode gaze call, sanitized free-text
@@ -587,10 +604,6 @@ Short version, mapped to the challenge's evaluation rubric:
   reaching an LLM prompt or being persisted, on top of the primary defense
   that every LLM output here is strictly schema/range-validated before use
   and screened for prompt-leak markers before being shown to the user.
-- **LLM failure handling & graceful degradation**: every LLM call runs
-  through a hard `ThreadPoolExecutor` timeout (`LLM_TIMEOUT_SECONDS`, default
-  15s); both LLM-touching features (agent narration, insights) have
-  deterministic non-LLM fallbacks and always report which one actually ran.
 - **Consequential actions**: the only "consequential" action in this
   prototype is a purchase decision, and it's always a deterministic,
   probability-driven function of persona config — never an autonomous LLM
@@ -598,6 +611,15 @@ Short version, mapped to the challenge's evaluation rubric:
 - **Least privilege**: the LLM gateway only ever receives a prompt and
   returns text — no DB, session, or navigation access, even if fully
   compromised via prompt injection.
+
+#### LLM failure handling & graceful degradation
+
+Every LLM call runs through a hard `ThreadPoolExecutor` timeout
+(`LLM_TIMEOUT_SECONDS`, default 15s). All four LLM-touching features —
+agent narration, insights, "ask the data", and persona-suggest — have
+deterministic non-LLM fallbacks and always report which one actually ran
+(`generated_by: "llm" | "heuristic_fallback"`). Nothing in the app *requires*
+a working LLM credential to be fully usable end-to-end.
 
 ## Testing
 

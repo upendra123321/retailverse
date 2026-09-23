@@ -2,8 +2,8 @@
 # one process/port, so the whole app is reachable over one HTTPS origin
 # (required for browser webcam access) with zero CORS configuration.
 #
-# Build:  docker build -t shopper-panel .
-# Run:    docker run -p 8000:8000 --env-file .env shopper-panel
+# Build:  docker build -t retailverse .
+# Run:    docker run -p 8000:8000 --env-file .env retailverse
 # Deploy: push this Dockerfile to Render / Fly.io / AWS App Runner /
 #         AWS Lightsail Containers - all of them build+run it as-is.
 

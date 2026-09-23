@@ -67,7 +67,7 @@ class AgentGazeResponse(BaseModel):
 
 SubjectType = Literal["real", "agent"]
 EventType = Literal[
-    "zone_dwell", "product_interaction", "purchase", "navigation_sample", "ad_view", "agent_thought"
+    "zone_dwell", "product_interaction", "purchase", "navigation_sample", "ad_view", "agent_thought", "music_change"
 ]
 
 

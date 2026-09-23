@@ -5,11 +5,13 @@ import {
   fetchCompare,
   fetchInsights,
   fetchPersonas,
+  fetchSessions,
   fetchStoreLayout,
   fetchZoneStats,
   runBatchSimulation,
   type AskDataResult,
   type BatchSimulateResult,
+  type SessionWithSummary,
 } from "../../api/client";
 import type { AdZonesConfig, Persona, StoreLayout } from "../../types/store";
 import { AttentionHeatmap, type PlottableZone } from "./AttentionHeatmap";
@@ -30,6 +32,100 @@ interface ZoneStat {
   purchase_count: number;
 }
 
+interface MusicBehaviorInsight {
+  id: string;
+  label: string;
+  source: string;
+  sessions: number;
+  avgDwellSec: number;
+  interactionRate: number;
+  purchaseRate: number;
+  avgPurchaseTotal: number;
+  happinessScore: number;
+  searchingScore: number;
+}
+
+function clamp01(value: number): number {
+  return Math.min(1, Math.max(0, value));
+}
+
+function getMusicMeta(session: SessionWithSummary): { id: string; label: string; source: string } | null {
+  const meta = session.meta?.ambient_music;
+  if (!meta || typeof meta !== "object") return null;
+  const music = meta as Record<string, unknown>;
+  const id = typeof music.music_id === "string" ? music.music_id : null;
+  if (!id || id === "off") return null;
+  return {
+    id,
+    label: typeof music.music_label === "string" ? music.music_label : id,
+    source: typeof music.music_source === "string" ? music.music_source : "unknown",
+  };
+}
+
+function buildMusicInsights(sessions: SessionWithSummary[]): MusicBehaviorInsight[] {
+  const grouped = new Map<
+    string,
+    {
+      label: string;
+      source: string;
+      sessions: number;
+      dwellMs: number;
+      interactions: number;
+      purchaseSessions: number;
+      purchaseTotal: number;
+    }
+  >();
+
+  for (const session of sessions) {
+    const music = getMusicMeta(session);
+    if (!music || !session.summary) continue;
+    const existing =
+      grouped.get(music.id) ??
+      {
+        label: music.label,
+        source: music.source,
+        sessions: 0,
+        dwellMs: 0,
+        interactions: 0,
+        purchaseSessions: 0,
+        purchaseTotal: 0,
+      };
+    existing.sessions += 1;
+    existing.dwellMs += session.summary.total_dwell_ms ?? 0;
+    existing.interactions += session.summary.interaction_count ?? 0;
+    existing.purchaseSessions += (session.summary.purchase_count ?? 0) > 0 ? 1 : 0;
+    existing.purchaseTotal += session.summary.purchase_total ?? 0;
+    grouped.set(music.id, existing);
+  }
+
+  return Array.from(grouped.entries())
+    .map(([id, data]) => {
+      const avgDwellSec = data.dwellMs / data.sessions / 1000;
+      const interactionRate = data.interactions / data.sessions;
+      const purchaseRate = data.purchaseSessions / data.sessions;
+      const avgPurchaseTotal = data.purchaseTotal / data.sessions;
+      const happinessScore = Math.round(
+        100 * clamp01(purchaseRate * 0.55 + clamp01(interactionRate / 3) * 0.25 + clamp01(avgPurchaseTotal / 25) * 0.2)
+      );
+      const searchingScore = Math.round(
+        100 * clamp01(clamp01(avgDwellSec / 90) * 0.45 + clamp01(interactionRate / 4) * 0.35 + (1 - purchaseRate) * 0.2)
+      );
+      return {
+        id,
+        label: data.label,
+        source: data.source,
+        sessions: data.sessions,
+        avgDwellSec,
+        interactionRate,
+        purchaseRate,
+        avgPurchaseTotal,
+        happinessScore,
+        searchingScore,
+      };
+    })
+    .sort((a, b) => b.sessions - a.sessions || b.happinessScore - a.happinessScore);
+}
+
 export function AnalyticsDashboard({ onClose }: Props) {
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [storeLayout, setStoreLayout] = useState<StoreLayout | null>(null);
@@ -41,6 +137,7 @@ export function AnalyticsDashboard({ onClose }: Props) {
   const [zones, setZones] = useState<ZoneStat[]>([]);
   const [zeroAttention, setZeroAttention] = useState<string[]>([]);
   const [sessionCount, setSessionCount] = useState(0);
+  const [musicInsights, setMusicInsights] = useState<MusicBehaviorInsight[]>([]);
   const [compare, setCompare] = useState<any>(null);
   const [insights, setInsights] = useState<{ generated_by: string; narrative: string } | null>(null);
   const [loading, setLoading] = useState(false);
@@ -114,12 +211,17 @@ export function AnalyticsDashboard({ onClose }: Props) {
       persona_key: personaKey || undefined,
       variant_id: variantId || undefined,
     };
-    Promise.all([fetchZoneStats(params), fetchCompare({ persona_key: personaKey || undefined, variant_id: variantId || undefined })])
-      .then(([zoneResp, compareResp]) => {
+    Promise.all([
+      fetchZoneStats(params),
+      fetchCompare({ persona_key: personaKey || undefined, variant_id: variantId || undefined }),
+      fetchSessions(params),
+    ])
+      .then(([zoneResp, compareResp, sessionResp]) => {
         setZones(zoneResp.zones);
         setZeroAttention(zoneResp.zones_with_zero_attention);
         setSessionCount(zoneResp.session_count);
         setCompare(compareResp);
+        setMusicInsights(buildMusicInsights(sessionResp));
       })
       .catch((err) => setErrorMsg(err instanceof Error ? err.message : "Failed to load analytics"))
       .finally(() => setLoading(false));
@@ -298,6 +400,40 @@ export function AnalyticsDashboard({ onClose }: Props) {
                 )}
               </div>
             )}
+
+            <div className="dashboard-music">
+              <h3>Music-driven shopping behavior</h3>
+              <p className="dashboard-simulate-hint">
+                Scores use recorded session metrics only: purchases and basket value indicate happier buying; longer dwell plus
+                interactions without purchase indicates searching or comparison.
+              </p>
+              {musicInsights.length === 0 ? (
+                <p>No music-tagged completed sessions yet. Play a track, shop, checkout, then reopen the report.</p>
+              ) : (
+                <div className="music-insight-grid">
+                  {musicInsights.map((track) => (
+                    <div key={track.id} className="music-insight-card">
+                      <strong>{track.label}</strong>
+                      <span>{track.source === "uploaded" ? "Uploaded file" : "Preset track"}</span>
+                      <div className="music-score-row">
+                        <span>Happy buying</span>
+                        <meter min={0} max={100} value={track.happinessScore} />
+                        <b>{track.happinessScore}</b>
+                      </div>
+                      <div className="music-score-row">
+                        <span>Searching</span>
+                        <meter min={0} max={100} value={track.searchingScore} />
+                        <b>{track.searchingScore}</b>
+                      </div>
+                      <p>
+                        {track.sessions} session(s) · {(track.purchaseRate * 100).toFixed(0)}% purchase rate ·{" "}
+                        {track.interactionRate.toFixed(1)} interaction(s)/session · {track.avgDwellSec.toFixed(0)}s avg dwell
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
 
             <div className="dashboard-insights">
               <h3>Automated insights</h3>

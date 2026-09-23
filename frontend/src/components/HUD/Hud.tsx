@@ -1,4 +1,5 @@
 import type { AdZonesConfig } from "../../types/store";
+import { AMBIENT_PRESET_OPTIONS, type AmbientMusicSelection, type AmbientPresetTrackId } from "../Scene/AmbientStoreMusic";
 
 interface Props {
   isTrackingReady: boolean;
@@ -10,6 +11,12 @@ interface Props {
   adConfig: AdZonesConfig | null;
   variantId: string;
   onVariantChange: (variantId: string) => void;
+  ambientMusic: AmbientMusicSelection;
+  musicPlaying: boolean;
+  musicError: string | null;
+  onAmbientPresetChange: (trackId: AmbientPresetTrackId) => void;
+  onAmbientFileChange: (file: File) => void;
+  onMusicPlayingChange: (playing: boolean) => void;
   storeLoadError: string | null;
 }
 
@@ -23,8 +30,16 @@ export function Hud({
   adConfig,
   variantId,
   onVariantChange,
+  ambientMusic,
+  musicPlaying,
+  musicError,
+  onAmbientPresetChange,
+  onAmbientFileChange,
+  onMusicPlayingChange,
   storeLoadError,
 }: Props) {
+  const musicDisabled = ambientMusic.kind === "preset" && ambientMusic.id === "off";
+
   return (
     <div className="hud">
       <div className="hud-panel">
@@ -55,6 +70,42 @@ export function Hud({
             </select>
           </label>
         )}
+
+        <div className="hud-music-control">
+          <label className="hud-variant-picker">
+            Background music:
+            <select
+              value={ambientMusic.kind === "preset" ? ambientMusic.id : ambientMusic.id}
+              onChange={(e) => onAmbientPresetChange(e.target.value as AmbientPresetTrackId)}
+            >
+              {AMBIENT_PRESET_OPTIONS.map((track) => (
+                <option key={track.id} value={track.id}>
+                  {track.label}
+                </option>
+              ))}
+              {ambientMusic.kind === "uploaded" && <option value={ambientMusic.id}>{ambientMusic.label}</option>}
+            </select>
+          </label>
+          <label className="hud-file-picker">
+            Add music file:
+            <input
+              type="file"
+              accept="audio/*"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) onAmbientFileChange(file);
+                e.currentTarget.value = "";
+              }}
+            />
+          </label>
+          <button type="button" onClick={() => onMusicPlayingChange(!musicPlaying)} disabled={musicDisabled}>
+            {musicPlaying ? "Pause Music" : "Play Music"}
+          </button>
+          <p className="hud-music-insight">
+            Music is tagged with each shopper session so the report can compare mood, search intent, and purchases by track.
+          </p>
+          {musicError && <p className="hud-error">Music: {musicError}</p>}
+        </div>
 
         <button onClick={onCalibrate}>{isCalibrated ? "Recalibrate Eyes" : "Calibrate Eyes"}</button>
         <button onClick={onAgentMode}>Agent Mode</button>

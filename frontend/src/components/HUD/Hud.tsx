@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import type { AdZonesConfig } from "../../types/store";
 import { AMBIENT_PRESET_OPTIONS, type AmbientMusicSelection, type AmbientPresetTrackId } from "../Scene/AmbientStoreMusic";
 
@@ -38,6 +39,7 @@ export function Hud({
   onMusicPlayingChange,
   storeLoadError,
 }: Props) {
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const musicDisabled = ambientMusic.kind === "preset" && ambientMusic.id === "off";
 
   return (
@@ -75,7 +77,7 @@ export function Hud({
           <label className="hud-variant-picker">
             Background music:
             <select
-              value={ambientMusic.kind === "preset" ? ambientMusic.id : ambientMusic.id}
+              value={ambientMusic.kind === "preset" ? ambientMusic.id : "uploaded"}
               onChange={(e) => onAmbientPresetChange(e.target.value as AmbientPresetTrackId)}
             >
               {AMBIENT_PRESET_OPTIONS.map((track) => (
@@ -83,24 +85,29 @@ export function Hud({
                   {track.label}
                 </option>
               ))}
-              {ambientMusic.kind === "uploaded" && <option value={ambientMusic.id}>{ambientMusic.label}</option>}
+              {ambientMusic.kind === "uploaded" && <option value="uploaded">Uploaded: {ambientMusic.label}</option>}
             </select>
           </label>
-          <label className="hud-file-picker">
-            Add music file:
-            <input
-              type="file"
-              accept="audio/*"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) onAmbientFileChange(file);
-                e.currentTarget.value = "";
-              }}
-            />
-          </label>
-          <button type="button" onClick={() => onMusicPlayingChange(!musicPlaying)} disabled={musicDisabled}>
-            {musicPlaying ? "Pause Music" : "Play Music"}
-          </button>
+          <input
+            ref={fileInputRef}
+            className="hud-hidden-file-input"
+            type="file"
+            accept="audio/*"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) onAmbientFileChange(file);
+              e.currentTarget.value = "";
+            }}
+          />
+          <div className="hud-music-actions">
+            <button type="button" onClick={() => fileInputRef.current?.click()}>
+              Upload Music File
+            </button>
+            <button type="button" onClick={() => onMusicPlayingChange(!musicPlaying)} disabled={musicDisabled}>
+              {musicPlaying ? "Pause Music" : "Play Music"}
+            </button>
+          </div>
+          {ambientMusic.kind === "uploaded" && <p className="hud-selected-file">Selected: {ambientMusic.label}</p>}
           <p className="hud-music-insight">
             Music is tagged with each shopper session so the report can compare mood, search intent, and purchases by track.
           </p>

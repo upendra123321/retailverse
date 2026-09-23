@@ -7,6 +7,11 @@ content point in order: **team intro → problem → solution → tech E2E →
 key features/innovation → impact/feasibility → call to action.**
 Bracketed notes are delivery cues, not to be read aloud.
 
+> For a longer, hands-on live walkthrough instead of this recorded pitch —
+> especially one that proves the AI/LLM guardrails, security, and panel
+> privacy controls live with real commands — see
+> **[DEMO_SCRIPT.md](DEMO_SCRIPT.md)**.
+
 ---
 
 ### [Slide 1 — Title] 0:00–0:15

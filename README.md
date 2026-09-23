@@ -37,6 +37,12 @@ challenge.
 - [Testing](#testing)
 - [Known limitations & roadmap](#known-limitations--roadmap)
 
+> **Presenting this?** [DEMO_SCRIPT.md](DEMO_SCRIPT.md) is a step-by-step,
+> copy-pasteable live-demo runbook (install → run → guided walkthrough)
+> focused on proving the AI/LLM guardrails, security controls, and panel
+> data privacy live with real commands and real responses. For a recorded
+> 5-minute pitch video instead, see [PITCH_SCRIPT.md](PITCH_SCRIPT.md).
+
 ---
 
 ## Quick start — Docker (no installs needed)

@@ -410,31 +410,6 @@
   padding: 4px;
 }
 
-.hud-music-control {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.18);
-}
-
-.hud-file-picker {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 13px;
-  margin-top: 8px;
-}
-
-.hud-file-picker input {
-  max-width: 100%;
-  font-size: 12px;
-}
-
-.hud-music-insight {
-  margin: 6px 0 0;
-  font-size: 12px;
-  opacity: 0.72;
-}
-
 /* Crosshair + product interaction / cart HUD (real shopper mode) */
 .crosshair {
   position: absolute;
@@ -676,54 +651,10 @@
 
 .dashboard-blind-spots,
 .dashboard-compare,
-.dashboard-music,
 .dashboard-insights {
   margin-top: 20px;
   padding-top: 12px;
   border-top: 1px solid rgba(255, 255, 255, 0.15);
-}
-
-.music-insight-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-  gap: 12px;
-}
-
-.music-insight-card {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 8px;
-  padding: 12px;
-  font-size: 13px;
-}
-
-.music-insight-card strong,
-.music-insight-card span {
-  display: block;
-}
-
-.music-insight-card span {
-  opacity: 0.68;
-  font-size: 12px;
-  margin-top: 2px;
-}
-
-.music-score-row {
-  display: grid;
-  grid-template-columns: 88px 1fr 28px;
-  gap: 8px;
-  align-items: center;
-  margin-top: 10px;
-}
-
-.music-score-row meter {
-  width: 100%;
-}
-
-.music-insight-card p {
-  margin: 10px 0 0;
-  opacity: 0.78;
-  line-height: 1.45;
 }
 
 .dashboard-insights button {

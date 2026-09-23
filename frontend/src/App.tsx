@@ -19,13 +19,6 @@ import { ShoppingHud } from "./components/Interaction/ShoppingHud";
 import { AnalyticsDashboard } from "./components/Dashboard/AnalyticsDashboard";
 import { purchaseProbability } from "./components/Agent/personaNavigation";
 import { priceFor } from "./data/productCatalog";
-import {
-  AMBIENT_PRESET_OPTIONS,
-  DEFAULT_AMBIENT_SELECTION,
-  ambientMusicAnalyticsMeta,
-  type AmbientMusicSelection,
-  type AmbientPresetTrackId,
-} from "./components/Scene/AmbientStoreMusic";
 import type { AdZonesConfig, StoreZone } from "./types/store";
 import "./App.css";
 
@@ -43,10 +36,6 @@ export default function App() {
   const [coefficients, setCoefficients] = useState<Coefficients | null>(null);
   const [agentConfig, setAgentConfig] = useState<AgentConfig | null>(null);
   const [showDashboard, setShowDashboard] = useState(false);
-  const [ambientMusic, setAmbientMusic] = useState<AmbientMusicSelection>(DEFAULT_AMBIENT_SELECTION);
-  const [musicPlaying, setMusicPlaying] = useState(false);
-  const [musicError, setMusicError] = useState<string | null>(null);
-  const uploadedMusicUrlRef = useRef<string | null>(null);
 
   // --- Store metadata (zones + ad variants), loaded once ---------------------
   const [zones, setZones] = useState<StoreZone[]>([]);
@@ -122,61 +111,6 @@ export default function App() {
   // --- Behavioral session tracking (shared real/agent) ------------------------
   const behaviorSession = useBehaviorSession();
 
-  const releaseUploadedMusicUrl = useCallback(() => {
-    if (!uploadedMusicUrlRef.current) return;
-    URL.revokeObjectURL(uploadedMusicUrlRef.current);
-    uploadedMusicUrlRef.current = null;
-  }, []);
-
-  useEffect(() => releaseUploadedMusicUrl, [releaseUploadedMusicUrl]);
-
-  const handleAmbientPresetChange = useCallback(
-    (trackId: AmbientPresetTrackId) => {
-      const preset = AMBIENT_PRESET_OPTIONS.find((track) => track.id === trackId);
-      if (!preset) return;
-      releaseUploadedMusicUrl();
-      setMusicError(null);
-      setAmbientMusic({ kind: "preset", id: preset.id, label: preset.label });
-      if (preset.id === "off") setMusicPlaying(false);
-    },
-    [releaseUploadedMusicUrl]
-  );
-
-  const handleAmbientFileChange = useCallback(
-    (file: File) => {
-      releaseUploadedMusicUrl();
-      const objectUrl = URL.createObjectURL(file);
-      uploadedMusicUrlRef.current = objectUrl;
-      setMusicError(null);
-      setAmbientMusic({
-        kind: "uploaded",
-        id: `uploaded:${file.name}`,
-        label: file.name,
-        objectUrl,
-      });
-      setMusicPlaying(true);
-    },
-    [releaseUploadedMusicUrl]
-  );
-
-  const logMusicChange = useCallback(
-    (selection: AmbientMusicSelection, playing: boolean) => {
-      behaviorSession.logEvent({
-        event_type: "music_change",
-        payload: {
-          ...ambientMusicAnalyticsMeta(selection),
-          playing,
-        },
-      });
-    },
-    [behaviorSession]
-  );
-
-  useEffect(() => {
-    if (appMode !== "manual" || manualMode !== "navigate") return;
-    logMusicChange(ambientMusic, musicPlaying);
-  }, [ambientMusic, appMode, logMusicChange, manualMode, musicPlaying]);
-
   const handleZoneDwell = useCallback(
     (zoneId: string, enteredAtMs: number, durationMs: number, source: GazeScreenPoint["source"]) => {
       if (durationMs < 150) return; // ignore noise-level glances
@@ -205,20 +139,9 @@ export default function App() {
   // Real-shopper session lifecycle: one active session per (manual+navigating, variant).
   useEffect(() => {
     if (appMode !== "manual" || manualMode !== "navigate" || !activeVariantId) return;
-    behaviorSession
-      .start({
-        subject_type: "real",
-        variant_id: activeVariantId,
-        meta: {
-          ambient_music: {
-            ...ambientMusicAnalyticsMeta(ambientMusic),
-            playing: musicPlaying,
-          },
-        },
-      })
-      .catch((err) => {
-        console.warn("Failed to start real-shopper session:", err);
-      });
+    behaviorSession.start({ subject_type: "real", variant_id: activeVariantId, meta: {} }).catch((err) => {
+      console.warn("Failed to start real-shopper session:", err);
+    });
     return () => {
       void behaviorSession.stop();
     };
@@ -355,9 +278,6 @@ export default function App() {
       <Experience
         controlMode={controlMode}
         onCanvasReady={handleCanvasReady}
-        ambientMusic={ambientMusic}
-        musicPlaying={musicPlaying}
-        onMusicPlaybackError={setMusicError}
         zones={zones}
         zoneLookup={zoneLookup}
         adConfig={adConfig}
@@ -384,12 +304,6 @@ export default function App() {
           adConfig={adConfig}
           variantId={variantId}
           onVariantChange={setVariantId}
-          ambientMusic={ambientMusic}
-          musicPlaying={musicPlaying}
-          musicError={musicError}
-          onAmbientPresetChange={handleAmbientPresetChange}
-          onAmbientFileChange={handleAmbientFileChange}
-          onMusicPlayingChange={setMusicPlaying}
           storeLoadError={storeLoadError}
         />
       )}

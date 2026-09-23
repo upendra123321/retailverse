@@ -199,8 +199,7 @@ export type BehaviorEventType =
   | "purchase"
   | "navigation_sample"
   | "ad_view"
-  | "agent_thought"
-  | "music_change";
+  | "agent_thought";
 
 export interface BehaviorEvent {
   event_type: BehaviorEventType;
@@ -229,30 +228,6 @@ export async function endSession(sessionId: string): Promise<{ session_id: strin
   const res = await apiFetch(`/api/sessions/${sessionId}/end`, { method: "POST" });
   if (!res.ok) throw new Error(`Failed to end session: ${res.status}`);
   return res.json();
-}
-
-export interface SessionListParams {
-  subject_type?: string;
-  persona_key?: string;
-  variant_id?: string;
-}
-
-export interface SessionWithSummary extends SessionRecord {
-  ended_at: string | null;
-  summary: {
-    total_dwell_ms?: number;
-    interaction_count?: number;
-    purchase_count?: number;
-    purchase_total?: number;
-  } | null;
-}
-
-export async function fetchSessions(params: SessionListParams = {}): Promise<SessionWithSummary[]> {
-  const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => !!v) as [string, string][]);
-  const res = await apiFetch(`/api/sessions?${qs.toString()}`);
-  if (!res.ok) throw new Error(`Failed to load sessions: ${res.status}`);
-  const data = await res.json();
-  return data.sessions;
 }
 
 // --- Analytics ----------------------------------------------------------------

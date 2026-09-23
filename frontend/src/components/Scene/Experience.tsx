@@ -5,7 +5,6 @@ import { StoreModel } from "./StoreModel";
 import { StoreExterior } from "./StoreExterior";
 import { FirstPersonControls } from "./FirstPersonControls";
 import { AdBanners } from "./AdBanners";
-import { AmbientStoreMusic, type AmbientMusicSelection } from "./AmbientStoreMusic";
 import { ZoneAttentionTracker, type GazeScreenPoint } from "./ZoneAttentionTracker";
 import { CrosshairRaycaster } from "./CrosshairRaycaster";
 import { NavigationSampler } from "./NavigationSampler";
@@ -25,9 +24,6 @@ function CanvasReady({ onReady }: { onReady: (canvas: HTMLCanvasElement) => void
 interface Props {
   controlMode: "manual" | "agent";
   onCanvasReady: (canvas: HTMLCanvasElement) => void;
-  ambientMusic: AmbientMusicSelection;
-  musicPlaying: boolean;
-  onMusicPlaybackError: (message: string) => void;
 
   zones: StoreZone[];
   zoneLookup: ZoneLookup | null;
@@ -53,9 +49,6 @@ interface Props {
 export function Experience({
   controlMode,
   onCanvasReady,
-  ambientMusic,
-  musicPlaying,
-  onMusicPlaybackError,
   zones,
   zoneLookup,
   adConfig,
@@ -80,12 +73,6 @@ export function Experience({
       <ambientLight intensity={0.6} />
       <directionalLight position={[5, 10, 5]} intensity={1} castShadow />
       <hemisphereLight args={["#bfe0ff", "#3a3a2a", 0.4]} />
-      <AmbientStoreMusic
-        selection={ambientMusic}
-        enabled={controlMode === "manual"}
-        playing={musicPlaying}
-        onPlaybackError={onMusicPlaybackError}
-      />
       <Suspense fallback={null}>
         <StoreModel />
         <StoreExterior />

@@ -9,6 +9,7 @@ import { loadCalibrationProfile, saveCalibrationProfile, fetchStoreLayout, fetch
 import { AgentSetupForm } from "./components/Agent/AgentSetupForm";
 import { AgentGazeOverlay } from "./components/Agent/AgentGazeOverlay";
 import { useAgentSimulation } from "./components/Agent/useAgentSimulation";
+import type { Phase } from "./components/Agent/AgentSimulationController";
 import type { AgentConfig } from "./components/Agent/types";
 import type { GazeScreenPoint } from "./components/Scene/ZoneAttentionTracker";
 import { buildFullLookup } from "./session/zoneLookup";
@@ -190,6 +191,11 @@ export default function App() {
   // --- Agent mode --------------------------------------------------------------
   const agentGazeRef = useRef<GazeScreenPoint>({ x: 0.5, y: 0.5, source: "agent_heuristic" });
   const visitedProductZonesRef = useRef<StoreZone[]>([]);
+  // "finished" = a goal-directed persona (Mission Shopper / Brand Loyalist /
+  // Switcher) reached checkout and has no more targets - it stops moving on
+  // purpose. Without surfacing this, a completed run is visually identical
+  // to a frozen/broken one (camera just stops either way).
+  const [agentPhase, setAgentPhase] = useState<Phase>("seeking");
 
   const {
     focus: agentFocus,
@@ -256,6 +262,7 @@ export default function App() {
 
   const handleStartSimulation = useCallback((config: AgentConfig) => {
     setAgentConfig(config);
+    setAgentPhase("seeking");
     setAppMode("agent-running");
   }, []);
 
@@ -281,6 +288,7 @@ export default function App() {
         persona={agentConfig?.persona ?? null}
         agentGazeRef={agentGazeRef}
         onAgentArrive={handleAgentArrive}
+        onAgentPhaseChange={setAgentPhase}
         onZoneDwell={handleZoneDwell}
         onNavigationSample={handleNavigationSample}
       />
@@ -319,7 +327,14 @@ export default function App() {
       {appMode === "agent-setup" && <AgentSetupForm onStart={handleStartSimulation} onCancel={() => setAppMode("manual")} />}
 
       {appMode === "agent-running" && agentConfig && (
-        <AgentGazeOverlay config={agentConfig} focus={agentFocus} isThinking={agentIsThinking} error={agentError} onStop={handleStopSimulation} />
+        <AgentGazeOverlay
+          config={agentConfig}
+          focus={agentFocus}
+          isThinking={agentIsThinking}
+          error={agentError}
+          phase={agentPhase}
+          onStop={handleStopSimulation}
+        />
       )}
 
       {showDashboard && <AnalyticsDashboard onClose={() => setShowDashboard(false)} />}

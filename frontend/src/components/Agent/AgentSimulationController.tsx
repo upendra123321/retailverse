@@ -15,7 +15,7 @@ const YAW_TURN_RATE = 2.2; // rad/sec turning speed while walking toward a targe
 const GLANCE_MIN_MS = 1200;
 const GLANCE_MAX_MS = 3000;
 
-type Phase = "seeking" | "dwelling" | "finished";
+export type Phase = "seeking" | "dwelling" | "finished";
 
 interface Props {
   persona: Persona | null;
@@ -27,6 +27,12 @@ interface Props {
   /** Fired once when the agent arrives and begins dwelling at a new target zone -
    * used by the caller to log product_interaction / eventual purchase events. */
   onArrive?: (zone: StoreZone) => void;
+  /** Fired whenever the navigation phase transitions - in particular
+   * "finished", which goal-directed personas (mission/loyalist/switcher)
+   * reach once they've checked out and have no more targets. Without this,
+   * a legitimately-completed run is visually indistinguishable from a
+   * frozen/stuck one, since the camera simply stops moving either way. */
+  onPhaseChange?: (phase: Phase) => void;
 }
 
 /** Goal-directed shopper navigation driven by a persona's declarative goals
@@ -37,7 +43,7 @@ interface Props {
  * the core differentiator: gaze + movement are *derived from the persona*,
  * not from a generic LLM chat loop.
  */
-export function AgentSimulationController({ persona, zones, paused = false, gazeRef, onArrive }: Props) {
+export function AgentSimulationController({ persona, zones, paused = false, gazeRef, onArrive, onPhaseChange }: Props) {
   const { camera, scene } = useThree();
   const yawRef = useRef(Math.PI);
   const groundRay = useRef(new THREE.Raycaster());
@@ -50,13 +56,22 @@ export function AgentSimulationController({ persona, zones, paused = false, gaze
   const glanceUntilRef = useRef(0);
   const glanceZoneRef = useRef<StoreZone | null>(null);
 
+  const setPhase = (next: Phase) => {
+    if (phaseRef.current === next) return;
+    phaseRef.current = next;
+    onPhaseChange?.(next);
+  };
+
   useEffect(() => {
     camera.position.set(0, EYE_HEIGHT, 4);
     yawRef.current = Math.PI;
     camera.rotation.set(0, yawRef.current, 0);
     queueRef.current = persona && zones.length > 0 ? buildTargetQueue(persona, zones) : [];
     targetIndexRef.current = 0;
+    // Reset directly (not via setPhase) so a fresh run always re-announces
+    // "seeking" even if the previous run also ended on "seeking".
     phaseRef.current = "seeking";
+    onPhaseChange?.("seeking");
     glanceUntilRef.current = 0;
   }, [camera, persona, zones]);
 
@@ -72,7 +87,7 @@ export function AgentSimulationController({ persona, zones, paused = false, gaze
       const dist = Math.sqrt(dx * dx + dz * dz);
 
       if (dist <= ARRIVAL_RADIUS) {
-        phaseRef.current = "dwelling";
+        setPhase("dwelling");
         dwellUntilRef.current = now + dwellDurationMs(persona, queueRef.current.length);
         onArrive?.(target);
       } else {
@@ -100,13 +115,13 @@ export function AgentSimulationController({ persona, zones, paused = false, gaze
         if (persona.navigation_style === "explore") {
           queueRef.current = rebuildQueueForContinuousBrowsing(persona, zones);
           targetIndexRef.current = 0;
-          phaseRef.current = "seeking";
+          setPhase("seeking");
         } else {
-          phaseRef.current = "finished";
+          setPhase("finished");
         }
       } else {
         targetIndexRef.current += 1;
-        phaseRef.current = "seeking";
+        setPhase("seeking");
       }
     }
 

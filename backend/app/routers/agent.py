@@ -40,8 +40,15 @@ router = APIRouter(prefix="/api/agent", tags=["agent"])
 MAX_IMAGE_DIMENSION = 1280
 
 # Two LLM calls per request (vision describe + judge) against a paid, shared
-# credential - the tightest budget of any endpoint in the app.
-_gaze_rate_limit = rate_limit("agent_gaze", max_calls=20, window_seconds=300)
+# credential. Unlike insights/batch-simulate (one-off, user-triggered
+# actions), this endpoint is polled continuously for the *entire duration*
+# of an Agent Mode run (every `captureIntervalSeconds`, default 6s, from
+# AgentSetupForm.tsx) - a multi-minute run can easily be 50-100+ calls. The
+# original 20-calls/5-min budget was sized like the one-off endpoints and
+# started 429-ing every call ~2 minutes into any run. This budget is instead
+# sized for "sustain any interval down to ~1s indefinitely" while still
+# bounding real abuse (100 calls/min from one IP is still a hard ceiling).
+_gaze_rate_limit = rate_limit("agent_gaze", max_calls=100, window_seconds=60)
 
 # Narration is provably non-critical (see this module's docstring - it never
 # drives movement/analytics), so it gets its own, much shorter timeout than

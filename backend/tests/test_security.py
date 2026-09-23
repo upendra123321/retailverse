@@ -52,6 +52,37 @@ def test_rate_limiter_resets_after_window_elapses():
     assert allowed is True
 
 
+def test_agent_gaze_budget_sustains_default_frontend_polling_interval(monkeypatch):
+    """Regression test for a real production bug: the agent_gaze rate limit
+    was originally sized like the one-off endpoints (insights/batch-simulate,
+    20 calls/300s) even though the frontend polls this endpoint continuously
+    for the entire duration of an Agent Mode run, every
+    AgentSetupForm.tsx's `captureIntervalSeconds` (default 6s, user-lowerable
+    to 1s). That mismatch meant every run started 429-ing ~2 minutes in.
+
+    This test drives a fake clock (no real sleeping) through 10 minutes of
+    calls at the default 6s cadence *and* at the fastest cadence the UI
+    allows (1s), against the actual production budget imported from
+    routers/agent.py, and asserts none of them are ever rejected.
+    """
+    import time as time_module
+
+    from app.routers.agent import _gaze_rate_limit
+
+    limiter: RateLimiter = _gaze_rate_limit.dependency.limiter  # type: ignore[attr-defined]
+    assert isinstance(limiter, RateLimiter)
+
+    fake_now = {"t": 0.0}
+    monkeypatch.setattr(time_module, "monotonic", lambda: fake_now["t"])
+
+    for cadence_seconds in (6.0, 1.0):
+        fake_now["t"] = 0.0
+        for _ in range(100):  # 100 calls at this cadence == 10 minutes (6s) / ~100s (1s)
+            allowed, _ = limiter.allow(f"test-client-{cadence_seconds}")
+            assert allowed, f"agent_gaze rate limit rejected a call at a {cadence_seconds}s polling cadence"
+            fake_now["t"] += cadence_seconds
+
+
 # --- Prompt-injection sanitizer ---------------------------------------------
 
 

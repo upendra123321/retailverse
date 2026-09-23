@@ -116,6 +116,13 @@ def rate_limit(bucket: str, max_calls: int, window_seconds: float) -> Callable:
                 headers={"Retry-After": str(int(retry_after) + 1)},
             )
 
+    # Exposed (rather than left as a bare closure cell) so tests can assert
+    # against the *actual* configured budget for a given endpoint - e.g.
+    # "does this limiter survive the frontend's real polling cadence?" -
+    # instead of only unit-testing the RateLimiter class in the abstract.
+    _dependency.limiter = limiter  # type: ignore[attr-defined]
+    _dependency.bucket = bucket  # type: ignore[attr-defined]
+
     return Depends(_dependency)
 
 

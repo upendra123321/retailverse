@@ -9,6 +9,7 @@ import { ZoneAttentionTracker, type GazeScreenPoint } from "./ZoneAttentionTrack
 import { CrosshairRaycaster } from "./CrosshairRaycaster";
 import { NavigationSampler } from "./NavigationSampler";
 import { AgentSimulationController } from "../Agent/AgentSimulationController";
+import type { Phase } from "../Agent/AgentSimulationController";
 import type { ZoneLookup } from "../../session/zoneLookup";
 import type { AdZonesConfig, Persona, StoreZone } from "../../types/store";
 
@@ -38,6 +39,7 @@ interface Props {
   persona: Persona | null;
   agentGazeRef: MutableRefObject<GazeScreenPoint>;
   onAgentArrive: (zone: StoreZone) => void;
+  onAgentPhaseChange?: (phase: Phase) => void;
 
   // Shared
   onZoneDwell: (zoneId: string, sessionMsEntered: number, durationMs: number, source: GazeScreenPoint["source"]) => void;
@@ -57,6 +59,7 @@ export function Experience({
   persona,
   agentGazeRef,
   onAgentArrive,
+  onAgentPhaseChange,
   onZoneDwell,
   onNavigationSample,
 }: Props) {
@@ -89,7 +92,13 @@ export function Experience({
         </>
       ) : (
         <>
-          <AgentSimulationController persona={persona} zones={zones} gazeRef={agentGazeRef} onArrive={onAgentArrive} />
+          <AgentSimulationController
+            persona={persona}
+            zones={zones}
+            gazeRef={agentGazeRef}
+            onArrive={onAgentArrive}
+            onPhaseChange={onAgentPhaseChange}
+          />
           <ZoneAttentionTracker
             lookup={zoneLookup}
             enabled

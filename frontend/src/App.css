@@ -258,6 +258,11 @@
   color: #ff8080;
 }
 
+.agent-hud-done {
+  color: #7ee08a;
+  font-weight: 500;
+}
+
 .agent-hud-substrong {
   opacity: 0.75;
   font-size: 12px;

@@ -1,3 +1,4 @@
+import type { Phase } from "./AgentSimulationController";
 import type { AgentConfig, AgentFocus } from "./types";
 
 interface Props {
@@ -5,10 +6,16 @@ interface Props {
   focus: AgentFocus | null;
   isThinking: boolean;
   error: string | null;
+  /** Navigation phase from AgentSimulationController. "finished" means the
+   * persona reached checkout and has no more goals - expected/by-design for
+   * Mission Shopper / Brand Loyalist / Switcher personas, which stop moving
+   * once done (only the "explore" Browser persona loops forever). Shown
+   * explicitly so a completed run isn't mistaken for a frozen/broken one. */
+  phase?: Phase;
   onStop: () => void;
 }
 
-export function AgentGazeOverlay({ config, focus, isThinking, error, onStop }: Props) {
+export function AgentGazeOverlay({ config, focus, isThinking, error, phase, onStop }: Props) {
   const cellCount = config.gridRows * config.gridCols;
 
   return (
@@ -46,10 +53,17 @@ export function AgentGazeOverlay({ config, focus, isThinking, error, onStop }: P
         <p className="agent-hud-substrong">
           navigation: {config.persona.navigation_style} · variant: {config.variantId}
         </p>
-        <p>{isThinking ? "Narrating…" : focus ? focus.reason : "Deterministic persona simulation running — narration optional."}</p>
-        {error && (
+        {phase === "finished" ? (
+          <p className="agent-hud-done">
+            ✅ Simulation complete — {config.persona.label} finished its shopping trip and checked out (or gave up
+            browsing). This is expected for goal-directed personas; only the Browser persona loops continuously.
+          </p>
+        ) : (
+          <p>{isThinking ? "Narrating…" : focus ? focus.reason : "Deterministic persona simulation running — narration optional."}</p>
+        )}
+        {error && phase !== "finished" && (
           <p className="agent-hud-error">
-            Narration unavailable (LLM unreachable) — persona movement continues normally.
+            Narration unavailable ({error.includes("429") || error.toLowerCase().includes("rate limit") ? "rate limited" : "LLM unreachable"}) — persona movement continues normally.
           </p>
         )}
         <button onClick={onStop}>Stop Simulation</button>

@@ -1,13 +1,13 @@
 """FastAPI application entry point."""
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import db
 from .config import FRONTEND_DEV_ORIGINS, FRONTEND_DIST_DIR
-from .routers import agent, analytics, audit, calibration, model, personas, sessions, simulate, store
-from .security import install_security_middleware
+from .routers import agent, analytics, audit, auth, calibration, model, personas, sessions, simulate, store
+from .security import install_security_middleware, require_auth
 
 app = FastAPI(
     title="Convenience Store Walkthrough API",
@@ -19,7 +19,12 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=FRONTEND_DEV_ORIGINS,
-    allow_credentials=False,
+    # True (rather than the prior False) so the auth session cookie survives
+    # a direct cross-origin dev request (frontend on :5173 hitting the API
+    # on :8000 without going through Vite's proxy). Safe because
+    # allow_origins is an explicit allowlist, never "*" - the two can't be
+    # combined per the CORS spec anyway.
+    allow_credentials=True,
     allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["*"],
 )
@@ -33,15 +38,21 @@ def on_startup() -> None:
     db.init_db()
 
 
-app.include_router(model.router)
-app.include_router(calibration.router)
-app.include_router(agent.router)
-app.include_router(store.router)
-app.include_router(personas.router)
-app.include_router(sessions.router)
-app.include_router(analytics.router)
-app.include_router(simulate.router)
-app.include_router(audit.router)
+# auth itself is never behind require_auth (see routers/auth.py docstring);
+# every other router is, but require_auth is a no-op unless an operator has
+# set APP_ACCESS_CODE (see security.auth_enabled) - so this is a zero-effect
+# change for local dev / any deployment that hasn't opted in.
+app.include_router(auth.router)
+_protected = Depends(require_auth)
+app.include_router(model.router, dependencies=[_protected])
+app.include_router(calibration.router, dependencies=[_protected])
+app.include_router(agent.router, dependencies=[_protected])
+app.include_router(store.router, dependencies=[_protected])
+app.include_router(personas.router, dependencies=[_protected])
+app.include_router(sessions.router, dependencies=[_protected])
+app.include_router(analytics.router, dependencies=[_protected])
+app.include_router(simulate.router, dependencies=[_protected])
+app.include_router(audit.router, dependencies=[_protected])
 
 
 @app.get("/api/health")

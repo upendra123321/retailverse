@@ -28,3 +28,11 @@ services:
         sync: false
       - key: LLM_TIMEOUT_SECONDS
         value: "15"
+      # Optional: set both to put a shared passcode gate in front of this
+      # public demo URL (see backend/app/security.py "Simple shared-passcode
+      # authentication"). Leave unset to keep the app open, exactly as
+      # before this feature existed - auth is a strict opt-in.
+      - key: APP_ACCESS_CODE
+        sync: false
+      - key: APP_SECRET_KEY
+        generateValue: true

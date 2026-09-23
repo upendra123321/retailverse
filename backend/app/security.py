@@ -15,28 +15,44 @@ pulling in a full auth/observability stack:
                        is webcam-based gaze tracking, so this is the one
                        header worth getting exactly right rather than
                        leaving default-open).
-  3. sanitize_free_text - a lightweight prompt-injection guard for the one
-                       place end users type free text that gets forwarded
-                       into an LLM prompt (persona_description in Agent
-                       Mode). The *real* safety net is that every LLM call
-                       downstream of this text has its output strictly
-                       schema/range-validated (see routers/agent.py -
-                       judge output index must be one of the offered grid
-                       cells or it's discarded) - this sanitizer is a second,
-                       defense-in-depth layer that flags/strips common
-                       instruction-override phrasing before it ever reaches
-                       the model, and records the attempt to the audit log.
+  3. sanitize_free_text - a lightweight prompt-injection AND PII guard for
+                       every place end users type free text that gets
+                       forwarded into an LLM prompt or stored in the shared
+                       persona library (persona_description, and the new
+                       /api/analytics/ask question). The *real* safety net
+                       is that every LLM call downstream of this text has
+                       its output strictly schema/range-validated (see
+                       routers/agent.py - judge output index must be one of
+                       the offered grid cells or it's discarded) - this
+                       sanitizer is a second, defense-in-depth layer that
+                       flags/redacts common instruction-override phrasing
+                       *and* accidental PII (emails, phone numbers, card-like
+                       numbers, SSN-like numbers) before it ever reaches the
+                       model or gets written to disk, and records every
+                       detection to the audit log.
+  4. Shared-passcode auth - a deliberately simple gate (see require_auth
+                       below) for a hosted demo URL with no user accounts:
+                       one team-wide passcode, a signed session cookie, no
+                       password database. Off by default (local dev) and
+                       only activates once APP_ACCESS_CODE is set (e.g. on
+                       the Render deployment) - see "Authorization model" in
+                       SECURITY.md for why this is the right scope for a
+                       hackathon prototype, and the documented upgrade path
+                       to real per-user accounts.
 """
 from __future__ import annotations
 
 import hashlib
+import hmac
+import os
 import re
+import secrets
 import threading
 import time
 from collections import defaultdict, deque
 from typing import Callable
 
-from fastapi import Depends, HTTPException, Request
+from fastapi import Cookie, Depends, HTTPException, Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
@@ -127,6 +143,99 @@ def rate_limit(bucket: str, max_calls: int, window_seconds: float) -> Callable:
 
 
 # ---------------------------------------------------------------------------
+# 1b. Simple shared-passcode authentication
+# ---------------------------------------------------------------------------
+
+AUTH_COOKIE_NAME = "rv_session"
+_SESSION_LIFETIME_SECONDS = 24 * 60 * 60  # 24h - long enough to survive a demo day, short enough to matter
+
+# A random, per-process fallback signing key so tokens are still tamper-proof
+# even if the operator never sets APP_SECRET_KEY explicitly - the trade-off
+# (documented in SECURITY.md) is that every process restart invalidates all
+# existing sessions, which is fine for this app's deployment shape (one
+# Docker container that only restarts on redeploy, not per-request).
+_FALLBACK_SECRET = secrets.token_bytes(32)
+
+
+def _secret_key() -> bytes:
+    configured = os.getenv("APP_SECRET_KEY")
+    return configured.encode("utf-8") if configured else _FALLBACK_SECRET
+
+
+def auth_enabled() -> bool:
+    """Auth only activates once an operator explicitly sets a passcode (e.g.
+    in the Render dashboard) - local/dev usage with no env var configured
+    stays exactly as frictionless as before this feature existed."""
+    return bool(os.getenv("APP_ACCESS_CODE"))
+
+
+def _sign(payload: str) -> str:
+    return hmac.new(_secret_key(), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def create_session_token() -> str:
+    """A small signed-not-encrypted token: `<expiry_epoch>.<hmac>`. No
+    external JWT library needed - this app only ever needs one claim
+    (expiry), and unlike RateLimiter state, a session token must survive
+    being handed to the browser, so it's a signed string, not memory."""
+    expires_at = int(time.time()) + _SESSION_LIFETIME_SECONDS
+    payload = str(expires_at)
+    return f"{payload}.{_sign(payload)}"
+
+
+def verify_session_token(token: str | None) -> bool:
+    if not token or "." not in token:
+        return False
+    payload, _, signature = token.rpartition(".")
+    if not hmac.compare_digest(_sign(payload), signature):
+        return False
+    try:
+        expires_at = int(payload)
+    except ValueError:
+        return False
+    return time.time() < expires_at
+
+
+def check_access_code(code: str) -> bool:
+    expected = os.getenv("APP_ACCESS_CODE", "")
+    # Constant-time compare so response timing can't leak how many leading
+    # characters of a guess were correct.
+    return bool(expected) and hmac.compare_digest(code, expected)
+
+
+def set_session_cookie(response: Response, request: Request) -> None:
+    response.set_cookie(
+        key=AUTH_COOKIE_NAME,
+        value=create_session_token(),
+        max_age=_SESSION_LIFETIME_SECONDS,
+        httponly=True,
+        samesite="lax",
+        # Secure requires HTTPS; Render/any real deployment terminates TLS in
+        # front of the app, but local http://localhost dev must still work.
+        secure=request.url.scheme == "https",
+        path="/",
+    )
+
+
+def clear_session_cookie(response: Response) -> None:
+    response.delete_cookie(key=AUTH_COOKIE_NAME, path="/")
+
+
+def require_auth(request: Request, rv_session: str | None = Cookie(default=None)) -> None:
+    """FastAPI dependency: `app.include_router(x, dependencies=[Depends(require_auth)])`.
+
+    A no-op (always passes) unless APP_ACCESS_CODE is configured - see
+    auth_enabled(). This keeps every existing test and local-dev workflow
+    unchanged by default, while giving a hosted demo URL a real gate once an
+    operator opts in.
+    """
+    if not auth_enabled():
+        return
+    if not verify_session_token(rv_session):
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+
+# ---------------------------------------------------------------------------
 # 2. Security response headers
 # ---------------------------------------------------------------------------
 
@@ -174,23 +283,70 @@ _SUSPICIOUS_PATTERNS = [
     ]
 ]
 
+# PII patterns: this app has no legitimate reason to ever store or forward a
+# real email/phone/card/SSN-shaped number (persona descriptions are
+# fictional shopper backstories, and analytics questions are about
+# aggregate zone stats) - so any match is redacted unconditionally rather
+# than judged for intent, unlike the prompt-injection patterns above.
+_PII_PATTERNS = [
+    ("email", re.compile(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9.-]+")),
+    ("credit_card", re.compile(r"(?<!\d)\d{4}[ -]?\d{4}[ -]?\d{4}[ -]?\d{3,4}(?!\d)")),
+    ("ssn", re.compile(r"(?<!\d)\d{3}-\d{2}-\d{4}(?!\d)")),
+    # Phone last (loosest pattern) so it never eats digits that already
+    # matched (and got redacted by) the tighter card/SSN patterns above.
+    ("phone", re.compile(r"(?<!\d)(\+?\d{1,3}[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}(?!\d)")),
+]
 
-def sanitize_free_text(text: str, *, max_length: int = 4000) -> tuple[str, bool]:
-    """Best-effort prompt-injection mitigation for free text that gets
-    embedded into an LLM prompt (currently: persona_description in Agent
-    Mode). Returns (cleaned_text, was_flagged).
 
-    This is deliberately a *secondary* control. The primary defense is that
-    every downstream LLM call here only ever returns a small, strictly
-    validated value (a grid-cell index that must be in a known set - see
-    _judge_focus in routers/agent.py); even a fully successful injection
-    can't do anything more damaging than pick the "wrong" cell, which the
-    caller already treats as just cosmetic narration.
+def sanitize_free_text(text: str, *, max_length: int = 4000) -> tuple[str, bool, list[str]]:
+    """Best-effort prompt-injection AND PII mitigation for free text that
+    gets embedded into an LLM prompt or persisted to the shared persona
+    library (persona_description, /api/analytics/ask questions). Returns
+    (cleaned_text, was_flagged, reasons) where reasons is e.g.
+    ["prompt_injection", "pii_email"] - kept granular so the audit log can
+    distinguish "someone tried to jailbreak the judge" from "someone pasted
+    their email by accident", which warrant very different follow-up.
+
+    This is deliberately a *secondary* control for prompt injection. The
+    primary defense is that every downstream LLM call here only ever
+    returns a small, strictly validated value (a grid-cell index that must
+    be in a known set - see _judge_focus in routers/agent.py); even a fully
+    successful injection can't do anything more damaging than pick the
+    "wrong" cell, which the caller already treats as just cosmetic
+    narration. For PII, this sanitizer *is* the primary control - there is
+    no legitimate reason for this app to ever store or transmit real PII.
     """
     cleaned = text[:max_length]
-    flagged = False
+    reasons: list[str] = []
     for pattern in _SUSPICIOUS_PATTERNS:
         if pattern.search(cleaned):
-            flagged = True
+            reasons.append("prompt_injection")
             cleaned = pattern.sub("[redacted]", cleaned)
-    return cleaned, flagged
+    for name, pattern in _PII_PATTERNS:
+        if pattern.search(cleaned):
+            reasons.append(f"pii_{name}")
+            cleaned = pattern.sub("[redacted]", cleaned)
+    return cleaned, bool(reasons), sorted(set(reasons))
+
+
+_LEAK_MARKERS = [
+    re.compile(p, re.IGNORECASE)
+    for p in [
+        r"as an ai language model",
+        r"my (system )?instructions (are|were)",
+        r"i (was|am) instructed to",
+        r"here is the system prompt",
+    ]
+]
+
+
+def looks_like_prompt_leak(text: str) -> bool:
+    """Output-side guardrail: a coarse heuristic check on text an LLM
+    *generated* (not typed by a user) for signs it broke character/leaked
+    its instructions instead of answering the actual question. Used by
+    /api/analytics/insights and /api/analytics/ask to fall back to the
+    deterministic heuristic report rather than show a compromised response -
+    complements (does not replace) the strict schema validation already
+    used for the agent_gaze judge output.
+    """
+    return any(pattern.search(text) for pattern in _LEAK_MARKERS)

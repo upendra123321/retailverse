@@ -222,13 +222,13 @@ def agent_gaze(request: AgentGazeRequest, http_request: Request) -> AgentGazeRes
     # prompt below. Strip/flag common instruction-override phrasing before
     # it gets anywhere near the model (see security.sanitize_free_text for
     # why this is a second layer, not the primary one).
-    persona_description, was_flagged = sanitize_free_text(request.persona_description)
+    persona_description, was_flagged, flag_reasons = sanitize_free_text(request.persona_description)
     if was_flagged:
         db.record_audit(
-            action="prompt_injection_pattern_detected",
+            action="free_text_sanitized",
             actor_ref=actor_ref(http_request),
             result="sanitized",
-            detail={"shopper_name": request.shopper_name},
+            detail={"shopper_name": request.shopper_name, "reasons": flag_reasons, "field": "persona_description"},
         )
 
     try:

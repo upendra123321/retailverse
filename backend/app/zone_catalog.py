@@ -64,6 +64,23 @@ def attention_relevant_zone_ids() -> set[str]:
     }
 
 
+def known_product_categories() -> list[str]:
+    """Real product categories that actually exist in this store's layout -
+    used to ground the LLM persona-field suggester (routers/personas.py) so
+    it can only pick a target_categories value that will actually match a
+    real zone in personaNavigation.ts's buildTargetQueue(), instead of
+    hallucinating a plausible-sounding category (e.g. "snacks") that
+    silently matches nothing and produces a persona that never targets
+    anything.
+    """
+    categories = {
+        zone.get("category")
+        for zone in load_store_layout().get("zones", [])
+        if zone.get("type") == "product" and zone.get("category")
+    }
+    return sorted(categories)
+
+
 def clear_cache() -> None:
     load_store_layout.cache_clear()
     load_ad_zone_variants.cache_clear()

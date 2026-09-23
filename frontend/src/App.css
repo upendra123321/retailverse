@@ -109,6 +109,98 @@
   transform: scale(1.3);
 }
 
+.auth-gate-checking {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0a0a14;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 14px;
+}
+
+.auth-gate-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: #0a0a14;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.auth-gate-panel {
+  width: min(360px, 90vw);
+  background: rgba(20, 20, 30, 0.95);
+  color: #fff;
+  border-radius: 10px;
+  padding: 32px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.auth-gate-panel h1 {
+  margin: 0;
+  font-size: 22px;
+  letter-spacing: 0.02em;
+}
+
+.auth-gate-subtitle {
+  margin: 0 0 6px;
+  font-size: 13px;
+  opacity: 0.75;
+}
+
+.auth-gate-panel input {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 6px;
+  padding: 10px 12px;
+  color: #fff;
+  font-size: 14px;
+  text-align: center;
+}
+
+.auth-gate-panel button {
+  background: #4a7dff;
+  border: none;
+  border-radius: 6px;
+  padding: 10px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.auth-gate-panel button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.auth-gate-error {
+  color: #ff8080;
+  font-size: 13px;
+  margin: 0;
+}
+
+.auth-gate-logout {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 40;
+  background: rgba(20, 20, 30, 0.75);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
 .agent-setup-overlay {
   position: absolute;
   inset: 0;
@@ -160,6 +252,34 @@
 .agent-setup-row {
   display: flex;
   gap: 12px;
+}
+
+.agent-setup-suggest-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: -4px;
+}
+
+.agent-setup-suggest-row button {
+  padding: 6px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.agent-setup-suggest-row button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.agent-setup-suggest-note {
+  font-size: 11px;
+  opacity: 0.75;
 }
 
 .agent-setup-error {
@@ -564,6 +684,56 @@
   line-height: 1.5;
 }
 
+.dashboard-ask {
+  margin-top: 20px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.dashboard-ask-row {
+  display: flex;
+  gap: 8px;
+}
+
+.dashboard-ask-row input {
+  flex: 1;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 13px;
+}
+
+.dashboard-ask-row button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  background: #4a7dff;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.dashboard-ask-row button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.dashboard-ask-answer {
+  margin-top: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 12px;
+  border-radius: 6px;
+}
+
+.dashboard-ask-answer-text {
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 /* Population-scale batch simulation panel */
 .dashboard-simulate {
   margin-top: 16px;
@@ -647,49 +817,97 @@
   opacity: 0.85;
 }
 
-/* Attention heatmap (top-down floor plan) */
+/* Attention heatmap (top-down floor plan, canvas heat-gradient field) */
 .heatmap-container {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
   margin: 12px 0 20px;
 }
 
-.heatmap-panel h4 {
-  margin: 0 0 6px;
-  font-size: 13px;
-  opacity: 0.8;
+.heatmap-mode-toggle {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
 }
 
-.heatmap-svg {
-  background: rgba(255, 255, 255, 0.03);
+.heatmap-mode-toggle button {
+  padding: 6px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.heatmap-mode-toggle button.active {
+  background: #4a7dff;
+  border-color: #4a7dff;
+  font-weight: 600;
+}
+
+.heatmap-canvas-wrap {
+  position: relative;
+  width: 100%;
+  max-width: 640px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.03);
 }
 
-.heatmap-bg {
-  fill: transparent;
+.heatmap-canvas,
+.heatmap-overlay-svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: auto;
+  display: block;
 }
 
-.heatmap-dot {
-  fill: #3d7eff;
-  stroke: none;
-}
-
-.heatmap-dot.heatmap-dot-checkout {
-  fill: #9b59b6;
-}
-
-.heatmap-dot.heatmap-dot-ad {
-  fill: #ff6b35;
+.heatmap-canvas-wrap::before {
+  /* Reserves aspect-ratio height since the canvas/svg children are
+     absolutely positioned (stacked on top of each other by design). */
+  content: "";
+  display: block;
+  padding-top: 59.375%; /* 380 / 640 */
 }
 
 .heatmap-dot-center {
-  fill: rgba(255, 255, 255, 0.9);
+  fill: rgba(255, 255, 255, 0.95);
+  stroke: rgba(0, 0, 0, 0.4);
+  stroke-width: 0.5;
 }
 
 .heatmap-label {
   fill: #fff;
-  font-size: 9px;
-  opacity: 0.85;
+  font-size: 10px;
+  opacity: 0.9;
+  paint-order: stroke;
+  stroke: rgba(0, 0, 0, 0.6);
+  stroke-width: 2px;
+}
+
+.heatmap-legend {
+  margin-top: 10px;
+  max-width: 640px;
+}
+
+.heatmap-legend-bar {
+  height: 10px;
+  border-radius: 5px;
+}
+
+.heatmap-legend-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  opacity: 0.75;
+  margin-top: 4px;
+}
+
+.heatmap-diff-hint {
+  margin-top: 10px;
+  font-size: 12px;
+  opacity: 0.8;
+  max-width: 640px;
 }

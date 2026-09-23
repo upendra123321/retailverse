@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import type { AgentConfig } from "./types";
 import type { AdZonesConfig, Persona } from "../../types/store";
-import { fetchAdZones, fetchPersonas, savePersona } from "../../api/client";
+import { fetchAdZones, fetchPersonas, savePersona, suggestPersonaFields } from "../../api/client";
 
 const GRID_PATTERN = /^(\d{1,2})x(\d{1,2})$/i;
 
@@ -33,6 +33,8 @@ export function AgentSetupForm({ onStart, onCancel }: Props) {
   const [selectedKey, setSelectedKey] = useState<string>("");
   const [custom, setCustom] = useState<Persona>(BLANK_CUSTOM);
   const [savingCustom, setSavingCustom] = useState(false);
+  const [suggesting, setSuggesting] = useState(false);
+  const [suggestNote, setSuggestNote] = useState<string | null>(null);
 
   const [shopperName, setShopperName] = useState("");
   const [shopperAge, setShopperAge] = useState(30);
@@ -57,6 +59,37 @@ export function AgentSetupForm({ onStart, onCancel }: Props) {
     () => personas.find((p) => p.persona_key === selectedKey) ?? null,
     [personas, selectedKey]
   );
+
+  async function handleSuggestFields() {
+    if (!custom.description.trim() || custom.description.trim().length < 5) {
+      setSuggestNote("Write a bit more of a backstory first (at least 5 characters).");
+      return;
+    }
+    setSuggesting(true);
+    setSuggestNote(null);
+    try {
+      const suggestion = await suggestPersonaFields(custom.description.trim());
+      setCustom((prev) => ({
+        ...prev,
+        navigation_style: suggestion.navigation_style,
+        target_categories: suggestion.target_categories,
+        patience_seconds: suggestion.patience_seconds,
+        browse_probability: suggestion.browse_probability,
+        ad_attention_bias: suggestion.ad_attention_bias,
+        price_sensitivity: suggestion.price_sensitivity,
+        purchase_likelihood: suggestion.purchase_likelihood,
+      }));
+      setSuggestNote(
+        suggestion.generated_by === "llm"
+          ? "✨ Fields suggested by LLM - review and adjust before saving."
+          : "Fields suggested by a heuristic fallback (LLM unavailable) - review and adjust before saving."
+      );
+    } catch (err) {
+      setSuggestNote(err instanceof Error ? err.message : "Failed to suggest fields");
+    } finally {
+      setSuggesting(false);
+    }
+  }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -186,6 +219,12 @@ export function AgentSetupForm({ onStart, onCancel }: Props) {
                 required
               />
             </label>
+            <div className="agent-setup-suggest-row">
+              <button type="button" onClick={handleSuggestFields} disabled={suggesting}>
+                {suggesting ? "Thinking..." : "✨ Suggest fields from description"}
+              </button>
+              {suggestNote && <span className="agent-setup-suggest-note">{suggestNote}</span>}
+            </div>
             <div className="agent-setup-row">
               <label>
                 Navigation style

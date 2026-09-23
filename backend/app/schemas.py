@@ -1,5 +1,5 @@
 """Pydantic schemas shared across routers."""
-from typing import Any, List, Literal, Optional
+from typing import Annotated, Any, List, Literal, Optional
 from pydantic import BaseModel, Field, model_validator
 
 
@@ -122,8 +122,13 @@ class Persona(BaseModel):
     label: str = Field(..., min_length=1, max_length=120)
     description: str = Field(..., min_length=1, max_length=2000)
     navigation_style: NavigationStyle
-    target_categories: List[str] = Field(default_factory=list)
-    preferred_product_keys: List[str] = Field(default_factory=list)
+    # max_length bounds on both the list itself and each entry - an
+    # unauthenticated public POST /api/personas has no other size limit on
+    # these, and they get echoed into every future agent_gaze judge prompt
+    # for this persona (see routers/agent.py), so an unbounded list is both
+    # a storage-bloat and a prompt-size vector.
+    target_categories: List[Annotated[str, Field(max_length=64)]] = Field(default_factory=list, max_length=20)
+    preferred_product_keys: List[Annotated[str, Field(max_length=64)]] = Field(default_factory=list, max_length=20)
     patience_seconds: float = Field(..., ge=5, le=600)
     browse_probability: float = Field(..., ge=0, le=1)
     ad_attention_bias: float = Field(..., ge=0, le=1)
@@ -133,6 +138,40 @@ class Persona(BaseModel):
 
 class PersonaListResponse(BaseModel):
     personas: List[Persona]
+
+
+# --- Grounded analytics Q&A ("Ask the data") --------------------------------
+
+
+class AskDataRequest(BaseModel):
+    question: str = Field(..., min_length=1, max_length=500)
+    subject_type: Optional[Literal["real", "agent"]] = None
+    persona_key: Optional[str] = Field(default=None, max_length=64)
+    variant_id: Optional[str] = Field(default=None, max_length=64)
+
+
+class AskDataResponse(BaseModel):
+    answer: str
+    generated_by: Literal["llm", "heuristic_fallback"]
+    question_flagged: bool = False
+
+
+# --- LLM-assisted persona field suggestion ----------------------------------
+
+
+class PersonaSuggestRequest(BaseModel):
+    description: str = Field(..., min_length=5, max_length=2000)
+
+
+class PersonaSuggestResponse(BaseModel):
+    navigation_style: NavigationStyle
+    target_categories: List[str]
+    patience_seconds: float
+    browse_probability: float
+    ad_attention_bias: float
+    price_sensitivity: Literal["low", "medium", "high"]
+    purchase_likelihood: float
+    generated_by: Literal["llm", "heuristic_fallback"]
 
 
 # --- Population-scale batch simulation --------------------------------------

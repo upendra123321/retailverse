@@ -1,6 +1,44 @@
 import type { Coefficients } from "../components/EyeTracking/gazeMapping";
 import type { AdZonesConfig, Persona, StoreLayout } from "../types/store";
 
+/** Every request goes through this so the auth session cookie (see the auth
+ * functions below) survives even a direct cross-origin dev request (frontend
+ * on :5173 hitting the API on :8000 without Vite's /api proxy) - harmless
+ * no-op for same-origin requests (the normal case via the proxy or in
+ * production), required for the cross-origin one. */
+function apiFetch(input: string, init: RequestInit = {}): Promise<Response> {
+  return fetch(input, { ...init, credentials: "include" });
+}
+
+// --- Auth ---------------------------------------------------------------
+
+export interface AuthStatus {
+  auth_required: boolean;
+  authenticated: boolean;
+}
+
+export async function fetchAuthStatus(): Promise<AuthStatus> {
+  const res = await apiFetch("/api/auth/status");
+  if (!res.ok) throw new Error(`Failed to check auth status: ${res.status}`);
+  return res.json();
+}
+
+export async function login(code: string): Promise<void> {
+  const res = await apiFetch("/api/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code }),
+  });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => null);
+    throw new Error(detail?.detail || `Login failed: ${res.status}`);
+  }
+}
+
+export async function logout(): Promise<void> {
+  await apiFetch("/api/auth/logout", { method: "POST" });
+}
+
 export interface CalibrationProfilePayload {
   profile_id: string;
   coefficients: Coefficients;
@@ -12,7 +50,7 @@ export interface CalibrationProfilePayload {
 export async function saveCalibrationProfile(
   payload: CalibrationProfilePayload
 ): Promise<CalibrationProfilePayload> {
-  const res = await fetch("/api/calibration", {
+  const res = await apiFetch("/api/calibration", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -25,7 +63,7 @@ export async function saveCalibrationProfile(
 export async function loadCalibrationProfile(
   profileId: string
 ): Promise<CalibrationProfilePayload | null> {
-  const res = await fetch(`/api/calibration/${profileId}`);
+  const res = await apiFetch(`/api/calibration/${profileId}`);
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`Failed to load calibration profile: ${res.status}`);
   return res.json();
@@ -48,7 +86,7 @@ export interface AgentGazeResponsePayload {
 export async function runAgentGaze(
   payload: AgentGazeRequestPayload
 ): Promise<AgentGazeResponsePayload> {
-  const res = await fetch("/api/agent/gaze", {
+  const res = await apiFetch("/api/agent/gaze", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -63,26 +101,54 @@ export async function runAgentGaze(
 // --- Store layout / ad zones / personas -------------------------------------
 
 export async function fetchStoreLayout(): Promise<StoreLayout> {
-  const res = await fetch("/api/store/layout");
+  const res = await apiFetch("/api/store/layout");
   if (!res.ok) throw new Error(`Failed to load store layout: ${res.status}`);
   return res.json();
 }
 
 export async function fetchAdZones(): Promise<AdZonesConfig> {
-  const res = await fetch("/api/store/ad-zones");
+  const res = await apiFetch("/api/store/ad-zones");
   if (!res.ok) throw new Error(`Failed to load ad zones: ${res.status}`);
   return res.json();
 }
 
 export async function fetchPersonas(): Promise<Persona[]> {
-  const res = await fetch("/api/personas");
+  const res = await apiFetch("/api/personas");
   if (!res.ok) throw new Error(`Failed to load personas: ${res.status}`);
   const data = await res.json();
   return data.personas;
 }
 
+export interface PersonaSuggestResult {
+  navigation_style: Persona["navigation_style"];
+  target_categories: string[];
+  patience_seconds: number;
+  browse_probability: number;
+  ad_attention_bias: number;
+  price_sensitivity: Persona["price_sensitivity"];
+  purchase_likelihood: number;
+  generated_by: "llm" | "heuristic_fallback";
+}
+
+/** LLM-assisted persona authoring: turns a one-line backstory into
+ * suggested structured fields - see backend/app/routers/personas.py::suggest_persona_fields.
+ * Every value is server-side validated/clamped before it comes back, so
+ * it's always safe to blindly apply this response to form state. */
+export async function suggestPersonaFields(description: string): Promise<PersonaSuggestResult> {
+  const res = await apiFetch("/api/personas/suggest", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ description }),
+  });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => null);
+    throw new Error(detail?.detail || `Failed to suggest persona fields: ${res.status}`);
+  }
+  return res.json();
+}
+
 export async function savePersona(persona: Persona): Promise<Persona> {
-  const res = await fetch("/api/personas", {
+  const res = await apiFetch("/api/personas", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(persona),
@@ -115,7 +181,7 @@ export interface SessionRecord {
 }
 
 export async function createSession(payload: SessionCreatePayload): Promise<SessionRecord> {
-  const res = await fetch("/api/sessions", {
+  const res = await apiFetch("/api/sessions", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -146,7 +212,7 @@ export interface BehaviorEvent {
 
 export async function sendEvents(sessionId: string, events: BehaviorEvent[]): Promise<{ inserted: number }> {
   if (events.length === 0) return { inserted: 0 };
-  const res = await fetch(`/api/sessions/${sessionId}/events`, {
+  const res = await apiFetch(`/api/sessions/${sessionId}/events`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ events }),
@@ -159,7 +225,7 @@ export async function sendEvents(sessionId: string, events: BehaviorEvent[]): Pr
 }
 
 export async function endSession(sessionId: string): Promise<{ session_id: string; ended_at: string; summary: unknown }> {
-  const res = await fetch(`/api/sessions/${sessionId}/end`, { method: "POST" });
+  const res = await apiFetch(`/api/sessions/${sessionId}/end`, { method: "POST" });
   if (!res.ok) throw new Error(`Failed to end session: ${res.status}`);
   return res.json();
 }
@@ -172,14 +238,14 @@ export async function fetchZoneStats(params: {
   variant_id?: string;
 }): Promise<any> {
   const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => !!v) as [string, string][]);
-  const res = await fetch(`/api/analytics/zones?${qs.toString()}`);
+  const res = await apiFetch(`/api/analytics/zones?${qs.toString()}`);
   if (!res.ok) throw new Error(`Failed to load zone stats: ${res.status}`);
   return res.json();
 }
 
 export async function fetchCompare(params: { persona_key?: string; variant_id?: string }): Promise<any> {
   const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => !!v) as [string, string][]);
-  const res = await fetch(`/api/analytics/compare?${qs.toString()}`);
+  const res = await apiFetch(`/api/analytics/compare?${qs.toString()}`);
   if (!res.ok) throw new Error(`Failed to load comparison: ${res.status}`);
   return res.json();
 }
@@ -205,7 +271,7 @@ export interface BatchSimulateResult {
  * makes "population-scale" a real, demoable capability instead of one agent
  * at a time in the 3D view. */
 export async function runBatchSimulation(payload: BatchSimulateRequestPayload): Promise<BatchSimulateResult> {
-  const res = await fetch("/api/simulate/batch", {
+  const res = await apiFetch("/api/simulate/batch", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -223,7 +289,35 @@ export async function fetchInsights(params: {
   variant_id?: string;
 }): Promise<any> {
   const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => !!v) as [string, string][]);
-  const res = await fetch(`/api/analytics/insights?${qs.toString()}`, { method: "POST" });
+  const res = await apiFetch(`/api/analytics/insights?${qs.toString()}`, { method: "POST" });
   if (!res.ok) throw new Error(`Failed to generate insights: ${res.status}`);
+  return res.json();
+}
+
+export interface AskDataPayload {
+  question: string;
+  subject_type?: string;
+  persona_key?: string;
+  variant_id?: string;
+}
+
+export interface AskDataResult {
+  answer: string;
+  generated_by: "llm" | "heuristic_fallback";
+  question_flagged: boolean;
+}
+
+/** "Ask the data": a grounded natural-language Q&A over the same computed
+ * analytics /insights uses - see backend/app/routers/analytics.py::ask_about_data. */
+export async function askAboutData(payload: AskDataPayload): Promise<AskDataResult> {
+  const res = await apiFetch("/api/analytics/ask", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => null);
+    throw new Error(detail?.detail || `Failed to get an answer: ${res.status}`);
+  }
   return res.json();
 }

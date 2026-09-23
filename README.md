@@ -60,16 +60,22 @@ everything else works without it).
 └─────────────┼─────────────────────────────────────────────────────────────────────────────┘
               ▼
 ┌───────────────────────────────── FastAPI backend (:8000) ─────────────────────────────────┐
+│ /api/auth        opt-in shared-passcode login/logout/status (off unless configured)        │
 │ /api/store       store_layout.json + ad_zones.json (zones, product catalog, A/B variants) │
-│ /api/personas    CRUD for persona library (personas.json)                                 │
+│ /api/personas    CRUD for persona library (personas.json) + LLM-backed field auto-suggest │
 │ /api/sessions    create / batched events / end  →  SQLite (sessions, events)              │
-│ /api/analytics   zone stats, real-vs-agent compare (cosine/Pearson/top-N), insights        │
+│ /api/analytics   zone stats, real-vs-agent compare (cosine/Pearson/top-N), insights,       │
+│                  + grounded "ask the data" natural-language Q&A                           │
 │ /api/simulate    population-scale headless batch simulation (100s of shoppers in seconds) │
 │ /api/agent/gaze  optional vision-LLM narration (Luna) — best-effort, hard-timeout,         │
 │                  never blocks the deterministic simulation above                          │
 │ /api/model       serves convenience_store.glb                                             │
 └─────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
+
+Every router above except `/api/auth` itself sits behind an opt-in
+`require_auth` dependency (§ [Access control](#access-control-opt-in)) —
+a no-op until an operator sets `APP_ACCESS_CODE`.
 
 ## Project structure
 
@@ -81,20 +87,27 @@ backend/
     db.py                 SQLite schema + session/event persistence + zone aggregation
     zone_catalog.py        Loads/merges store_layout.json + ad_zones.json into one lookup
     llm_gateway.py         Shared Azure LLM client, hard timeout + graceful fallback
-    security.py             Rate limiting, security headers, prompt-injection sanitization
+    security.py             Rate limiting, security headers, shared-passcode auth
+                             (HMAC-signed cookie sessions), prompt-injection/PII
+                             sanitization, output prompt-leak screening
     simulation.py           Headless population-scale persona simulation engine
     schemas.py              Pydantic models (sessions, events, personas, calibration, agent)
     routers/
+      auth.py                GET /api/auth/status, POST /login, POST /logout (opt-in gate)
       store.py              GET /api/store/layout, /api/store/ad-zones
       personas.py            GET/POST/DELETE /api/personas (rate-limited, audit-logged)
+                             + POST /api/personas/suggest (LLM field auto-suggest,
+                             strictly validated against the real catalog, heuristic fallback)
       sessions.py            POST /api/sessions, .../events, .../end; GET listing/detail
       analytics.py           GET /api/analytics/zones, /compare; POST /api/analytics/insights
+                             + POST /api/analytics/ask (grounded "ask the data" Q&A,
+                             heuristic fallback, prompt-leak-screened)
       simulate.py             POST /api/simulate/batch (population-scale headless simulation)
       agent.py                POST /api/agent/gaze (optional vision-LLM narration)
       calibration.py         GET/POST/DELETE eye-tracking calibration profiles
       model.py                GET /api/model -> convenience_store.glb
       audit.py                 GET /api/audit/recent (read-only audit trail)
-  tests/                     pytest suite (32 tests, ~1s) - see SECURITY.md §7
+  tests/                     pytest suite (61 tests, ~1.5s) - see SECURITY.md §7
   data/
     store_layout.json        Curated zones extracted from the GLB (products/checkout/structural)
     ad_zones.json             A/B ad banner placements + creative variants
@@ -107,19 +120,24 @@ frontend/
   src/
     App.tsx                    Top-level orchestration: mode switching, sessions, cart, dashboard
     api/client.ts               Typed fetch wrappers for every backend endpoint
+                                  (credentials: "include" on every call, for the auth cookie)
     types/store.ts               Shared TS types (zones, ad variants, personas)
     session/
       useBehaviorSession.ts       Session lifecycle (create/batch-log/end), race-condition safe
       zoneLookup.ts                 Maps 3D mesh names -> analytics zone_id (GLB + dynamic ad meshes)
     components/
+      Auth/                          AuthGate.tsx - passcode screen wrapping the whole app;
+                                     a no-op pass-through when auth isn't configured server-side
       Scene/                        Three.js store, raycasters (gaze zone + interaction crosshair),
                                      A/B ad banner rendering, navigation path sampler
       EyeTracking/                   MediaPipe FaceLandmarker hook, calibration UI, gaze regression
       Interaction/                   Shopping cart state + HUD
       Agent/                         Persona setup form, deterministic navigation engine,
                                      simulation controller, optional LLM narration overlay
-      Dashboard/                     Analytics dashboard, floor-plan attention heatmap,
-                                     population-scale batch-simulation controls
+      Dashboard/                     Analytics dashboard; canvas-rendered floor-plan attention
+                                     heatmap (real/agent/diff-gap modes, Gaussian-blurred heat
+                                     gradient, not discrete dots); population-scale
+                                     batch-simulation controls; "ask the data" LLM Q&A panel
       HUD/                           Controls, mode/variant selectors, status
 
 scripts/
@@ -174,9 +192,14 @@ py -3.12 scripts\setup.py
 
 Then edit the generated `.env` and set `LITE_LLM_API_KEY` to a valid key (ask
 a teammate — do not reuse a key you find committed anywhere, and never commit
-your own `.env`). Everything except the optional **LLM narration/insights**
-features works fine without a real key — see
+your own `.env`). Everything except the optional **LLM narration/insights/
+"ask the data"/persona-suggest** features works fine without a real key —
+see
 [Responsible AI: LLM failure handling](#llm-failure-handling--graceful-degradation).
+
+By default there is **no login screen** — leave `APP_ACCESS_CODE` unset in
+`.env` for local dev. See [Access control (opt-in)](#access-control-opt-in)
+if you want to put a passcode on a hosted demo URL.
 
 <details>
 <summary>What the setup script does / manual equivalent</summary>
@@ -299,7 +322,19 @@ data, and if it times out or fails, the simulation continues identically. See
 
 Personas are structured JSON (`backend/data/personas.json`), editable via
 `POST /api/personas` or the Agent Mode setup form's "custom persona" tab —
-no code changes needed to add a new consumer segment:
+no code changes needed to add a new consumer segment. Writing out all 6
+behavioral fields (navigation style, price sensitivity, dwell/browse/ad-bias
+knobs...) by hand for a new segment is tedious, so the custom-persona tab
+also has a **"✨ Suggest fields from description"** button: write a one-line
+backstory ("only buys what's on promotion, checks every shelf-talker before
+deciding"), click it, and `POST /api/personas/suggest` returns a best-guess
+for every field — via LLM if configured, else a keyword-based heuristic
+fallback (both paths clearly labelled `generated_by`). Either way, every
+returned value is strictly validated server-side before it's shown (enums
+checked against the allowed set, categories checked against the store's
+*real* catalog, numeric fields clamped into range) — the suggestion can
+never populate an invalid or nonsensical persona, and it's always
+pre-filled for you to review/adjust, never auto-saved.
 
 ```json
 {
@@ -358,6 +393,27 @@ statistically meaningful sample.
 > gaze estimate frequently raycasts against nearby structural meshes as noise
 > while looking at a product, which would otherwise unfairly tank the score.
 
+## Access control (opt-in)
+
+By default, **there is no login** — every route works with zero friction,
+which is what you want for local dev and for graders spinning this up
+quickly. If you're hosting a public demo URL and want a single shared door
+on it, set one environment variable:
+
+```bash
+# in .env (local) or the Render/hosting dashboard (production)
+APP_ACCESS_CODE=some-passcode-you-pick
+```
+
+The moment that's set, `AuthGate` (frontend) shows a passcode screen before
+rendering the app, and every backend route except `/api/auth/*` itself
+requires a valid session cookie (`require_auth`, `backend/app/security.py`).
+This is a **single shared passcode for the whole demo**, not a per-user
+account system — see [SECURITY.md §1](SECURITY.md#1-secure-coding-practices--authenticationauthorization)
+for the full rationale and the exact HMAC-signed-cookie mechanism. Also set
+`APP_SECRET_KEY` in production (Render's `render.yaml` already auto-generates
+this) so sessions survive backend restarts instead of resetting.
+
 ## 6. Analytics dashboard
 
 Click **View Insights Report** in the HUD to open the dashboard
@@ -373,11 +429,16 @@ Click **View Insights Report** in the HUD to open the dashboard
   structural geometry) — this is the "benchmark and quantify similarity"
   success criterion. Also returns `per_zone` (real vs. agent share per zone),
   which the dashboard's floor-plan heatmap plots directly.
-- The dashboard's **attention heatmap** (`AttentionHeatmap.tsx`) renders
-  every product/checkout/ad zone at its real (x, z) world position as a dot
-  sized/colored by dwell share, real shoppers and AI personas side by side on
-  the same floor plan — answers "which aisle did they look at, and where did
-  we put no ad" in one glance instead of reading a bar chart line by line.
+- The dashboard's **attention heatmap** (`AttentionHeatmap.tsx`) renders a
+  real canvas heat-gradient over the floor plan (Gaussian kernel density per
+  zone, computed on a coarse grid then upscaled with smoothing — the same
+  technique heatmap.js-style libraries use, avoiding a full-resolution
+  per-pixel computation), with three toggleable modes: **Real shoppers**,
+  **AI personas**, and **Attention gap** (a diff view — red = the zone where
+  real and simulated attention disagreed most, the most inspectable evidence
+  of where the persona model is or isn't yet accurate). A gradient legend
+  and small zone-dot overlay (labelled with % of peak attention) sit on top
+  of the heat field.
 - `POST /api/analytics/insights` — an LLM-narrated summary of the above
   (branding/shelf-placement/ad-effectiveness recommendations), with a
   deterministic heuristic fallback (see below) when the LLM is unavailable —
@@ -385,6 +446,16 @@ Click **View Insights Report** in the HUD to open the dashboard
   the prompt, never fabricated independent of the data. The response's
   `generated_by` field is always `"llm"` or `"heuristic_fallback"`, so the UI
   never misrepresents a fallback as model output.
+- **"Ask the data"** — a free-text natural-language question box under the
+  insights panel (`POST /api/analytics/ask`). The LLM answers using *only*
+  the same pre-computed, aggregated zone numbers already shown on the
+  dashboard — it never gets raw database or SQL access, so there's no
+  query-injection surface. The question is sanitized for prompt-injection/PII
+  patterns before it's sent, the response is screened for prompt-leak
+  markers before it's shown, and — same as insights — a deterministic
+  heuristic fallback answers directly from the raw numbers if the LLM is
+  unavailable or its output looks suspicious. Try: *"Which zone underperforms
+  for the Browser persona?"* or *"Are there any blind spots?"*
 
 ## Store layout & attention zones
 
@@ -496,18 +567,26 @@ Short version, mapped to the challenge's evaluation rubric:
 - **Credential handling**: the LLM API key lives only in a local, gitignored
   `.env` (see `.env.example`); read server-side only, never echoed to the
   client. Render/App Runner env vars are `sync: false`, never committed.
-- **Rate limiting**: every LLM-backed endpoint, plus batch simulation and
-  persona writes, has a per-IP sliding-window budget (`backend/app/security.py`)
-  — a public URL with a shared LLM credential and no login otherwise has no
-  abuse ceiling.
+- **Rate limiting**: every LLM-backed endpoint (including the newer "ask the
+  data" and persona-suggest ones), plus batch simulation and persona writes
+  and the login endpoint itself, has a per-IP sliding-window budget
+  (`backend/app/security.py`) — a public URL with a shared LLM credential
+  and no login otherwise has no abuse ceiling.
+- **Access control**: an opt-in, single-shared-passcode gate
+  (`APP_ACCESS_CODE`) protects a hosted demo URL via an HMAC-signed httpOnly
+  session cookie — a no-op until explicitly configured, so local dev and
+  grading stay frictionless. See [Access control](#access-control-opt-in).
 - **Audit trail**: every persona edit, batch-simulation run, insight
-  generation (labeled `llm` vs `heuristic_fallback`), and agent-mode gaze
-  call is logged with a hashed (never raw) caller reference — live at
-  `GET /api/audit/recent`.
-- **Prompt-injection mitigation**: user-authored persona text is scanned for
-  instruction-override patterns before reaching an LLM prompt, on top of the
-  primary defense that every LLM output here is strictly schema/range-
-  validated before use.
+  generation, "ask the data" query, and persona-suggestion (each labeled
+  `llm` vs `heuristic_fallback`), agent-mode gaze call, sanitized free-text
+  input, and screened LLM output is logged with a hashed (never raw) caller
+  reference — live at `GET /api/audit/recent`.
+- **Prompt-injection & PII mitigation**: user-authored free text (persona
+  descriptions, "ask the data" questions) is scanned for instruction-override
+  patterns *and* common PII shapes (email/credit-card/SSN/phone) before
+  reaching an LLM prompt or being persisted, on top of the primary defense
+  that every LLM output here is strictly schema/range-validated before use
+  and screened for prompt-leak markers before being shown to the user.
 - **LLM failure handling & graceful degradation**: every LLM call runs
   through a hard `ThreadPoolExecutor` timeout (`LLM_TIMEOUT_SECONDS`, default
   15s); both LLM-touching features (agent narration, insights) have
@@ -528,11 +607,14 @@ pip install -r requirements-dev.txt   # adds pytest + httpx on top of the app's 
 pytest -v
 ```
 
-32 tests, ~1s, no LLM credentials required (the suite deliberately clears
+61 tests, ~1.5s, no LLM credentials required (the suite deliberately clears
 them so it always exercises the heuristic-fallback/502 paths deterministically).
 Covers session lifecycle, persona CRUD + audit logging, batch-simulation
 limits, real-vs-synthetic comparison, insight fallback behavior, rate
-limiting, security headers, and malformed/oversized-input rejection. See
+limiting, security headers, malformed/oversized-input rejection, the
+opt-in shared-passcode auth flow end-to-end, PII/prompt-injection
+sanitization, prompt-leak output screening, and the "ask the data" /
+persona-suggest endpoints' fallback + guardrail + audit behavior. See
 `backend/tests/` and [SECURITY.md §7](SECURITY.md#7-running-the-evidence-yourself).
 
 ## Known limitations & roadmap

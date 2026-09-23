@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  askAboutData,
   fetchAdZones,
   fetchCompare,
   fetchInsights,
@@ -7,6 +8,7 @@ import {
   fetchStoreLayout,
   fetchZoneStats,
   runBatchSimulation,
+  type AskDataResult,
   type BatchSimulateResult,
 } from "../../api/client";
 import type { AdZonesConfig, Persona, StoreLayout } from "../../types/store";
@@ -44,6 +46,12 @@ export function AnalyticsDashboard({ onClose }: Props) {
   const [loading, setLoading] = useState(false);
   const [insightsLoading, setInsightsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // "Ask the data" - grounded LLM Q&A over the same computed stats as Insights.
+  const [askQuestion, setAskQuestion] = useState("");
+  const [askResult, setAskResult] = useState<AskDataResult | null>(null);
+  const [askLoading, setAskLoading] = useState(false);
+  const [askError, setAskError] = useState<string | null>(null);
 
   // Population-scale batch simulation controls.
   const [simCount, setSimCount] = useState(100);
@@ -132,6 +140,21 @@ export function AnalyticsDashboard({ onClose }: Props) {
       .then(setInsights)
       .catch((err) => setErrorMsg(err instanceof Error ? err.message : "Failed to generate insights"))
       .finally(() => setInsightsLoading(false));
+  };
+
+  const submitAskQuestion = () => {
+    if (!askQuestion.trim()) return;
+    setAskLoading(true);
+    setAskError(null);
+    askAboutData({
+      question: askQuestion.trim(),
+      subject_type: subjectType || undefined,
+      persona_key: personaKey || undefined,
+      variant_id: variantId || undefined,
+    })
+      .then(setAskResult)
+      .catch((err) => setAskError(err instanceof Error ? err.message : "Failed to get an answer"))
+      .finally(() => setAskLoading(false));
   };
 
   const maxDwell = Math.max(1, ...zones.map((z) => z.total_dwell_ms));
@@ -286,6 +309,36 @@ export function AnalyticsDashboard({ onClose }: Props) {
                   <p className="dashboard-insights-source">Source: {insights.generated_by === "llm" ? "LLM (grounded in stats below)" : "Deterministic heuristic fallback (LLM unavailable)"}</p>
                   <pre className="dashboard-insights-text">{insights.narrative}</pre>
                 </>
+              )}
+            </div>
+
+            <div className="dashboard-ask">
+              <h3>Ask the data</h3>
+              <p className="dashboard-simulate-hint">
+                Ask a natural-language question - the LLM answers using ONLY the same computed numbers shown above
+                (never raw database access), grounded and guardrailed exactly like the Insights report.
+              </p>
+              <div className="dashboard-ask-row">
+                <input
+                  value={askQuestion}
+                  onChange={(e) => setAskQuestion(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && submitAskQuestion()}
+                  placeholder="e.g. Which zone underperforms for this persona?"
+                  maxLength={500}
+                />
+                <button onClick={submitAskQuestion} disabled={askLoading || !askQuestion.trim()}>
+                  {askLoading ? "Thinking..." : "Ask"}
+                </button>
+              </div>
+              {askError && <p className="dashboard-error">{askError}</p>}
+              {askResult && (
+                <div className="dashboard-ask-answer">
+                  <p className="dashboard-insights-source">
+                    Source: {askResult.generated_by === "llm" ? "LLM (grounded in stats above)" : "Deterministic heuristic fallback (LLM unavailable)"}
+                    {askResult.question_flagged && " · your question was sanitized before being sent (see audit log)"}
+                  </p>
+                  <p className="dashboard-ask-answer-text">{askResult.answer}</p>
+                </div>
               )}
             </div>
           </>

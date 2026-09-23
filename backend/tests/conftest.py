@@ -40,7 +40,22 @@ atexit.register(lambda: shutil.rmtree(_TEST_DATA_DIR, ignore_errors=True))
 
 @pytest.fixture()
 def client():
-    """A fresh DB per test function, isolated from real data and from other tests."""
+    """A fresh DB *and* persona library per test function, isolated from
+    real data and from other tests.
+
+    The persona library (backend/data/personas.json under the temp
+    APP_DATA_DIR) is a plain file, not a DB table, so it doesn't get the
+    same automatic isolation the DB rows below get - a test that creates a
+    persona and forgets to delete it silently leaks state into every test
+    that runs afterward in the same session (this bit a real test once: see
+    git history around test_persona_description_is_sanitized_at_save_time).
+    Removing the file here, unconditionally, makes every test start from a
+    guaranteed-empty library regardless of what earlier tests did or forgot
+    to clean up.
+    """
+    from app.config import PERSONAS_PATH
+
+    PERSONAS_PATH.unlink(missing_ok=True)
     db.init_db()
     with TestClient(app) as c:
         yield c
@@ -50,6 +65,7 @@ def client():
         conn.execute("DELETE FROM events")
         conn.execute("DELETE FROM sessions")
         conn.execute("DELETE FROM audit_log")
+    PERSONAS_PATH.unlink(missing_ok=True)
 
 
 @pytest.fixture()

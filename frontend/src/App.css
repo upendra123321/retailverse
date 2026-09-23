@@ -410,6 +410,11 @@
   padding: 4px;
 }
 
+.hud-variant-picker select option {
+  background: #1c1c22;
+  color: #fff;
+}
+
 .hud-music-control {
   margin-top: 10px;
   padding-top: 10px;
@@ -610,6 +615,14 @@
   border: 1px solid rgba(255, 255, 255, 0.25);
   border-radius: 6px;
   padding: 6px;
+  color: #fff;
+}
+
+/* Same fix as .hud-variant-picker select: style the popup's option rows
+   explicitly, or they render with a native light background + inherited
+   white text and become unreadable except for the selected one. */
+.dashboard-filters select option {
+  background: #1c1c22;
   color: #fff;
 }
 

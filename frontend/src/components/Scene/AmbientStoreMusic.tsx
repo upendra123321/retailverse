@@ -6,23 +6,24 @@ export type AmbientMusicSelection =
   | { kind: "preset"; id: AmbientPresetTrackId; label: string }
   | { kind: "uploaded"; id: string; label: string; objectUrl: string };
 
-const PRESET_TRACKS: Record<Exclude<AmbientPresetTrackId, "off">, { volume: number; lfo: number; notes: number[] }> = {
+// Ambient beds for the convenience store scene. Files live in
+// frontend/src/public/audio and are served from /audio/* (see vite.config.ts).
+const PRESET_TRACKS: Record<Exclude<AmbientPresetTrackId, "off">, { src: string; volume: number }> = {
   calm: {
-    volume: 0.035,
-    lfo: 0.06,
-    notes: [261.63, 329.63, 392.0, 523.25],
+    src: "/audio/abiding-comfort.mp3",
+    volume: 0.35,
   },
   retro: {
-    volume: 0.03,
-    lfo: 0.09,
-    notes: [220.0, 277.18, 329.63, 440.0],
+    src: "/audio/a-cool-day-for-the-barbeque.mp3",
+    volume: 0.32,
   },
   night: {
-    volume: 0.028,
-    lfo: 0.04,
-    notes: [196.0, 246.94, 293.66, 392.0],
+    src: "/audio/a-flower-grows-where-the-battle-was.mp3",
+    volume: 0.3,
   },
 };
+
+const FADE_OUT_MS = 400;
 
 interface Props {
   selection: AmbientMusicSelection;
@@ -52,6 +53,23 @@ export function ambientMusicAnalyticsMeta(selection: AmbientMusicSelection): Rec
   };
 }
 
+// Ease the volume down before pausing so switching tracks mid-walkthrough
+// doesn't cut the bed off with an audible click.
+function fadeOutAndStop(audio: HTMLAudioElement) {
+  const steps = 8;
+  const startVolume = audio.volume;
+  let step = 0;
+  const timer = window.setInterval(() => {
+    step += 1;
+    audio.volume = Math.max(0, startVolume * (1 - step / steps));
+    if (step >= steps) {
+      window.clearInterval(timer);
+      audio.pause();
+      audio.src = "";
+    }
+  }, FADE_OUT_MS / steps);
+}
+
 export function AmbientStoreMusic({ selection, enabled, playing, onPlaybackError }: Props) {
   const cleanupRef = useRef<(() => void) | null>(null);
 
@@ -62,66 +80,24 @@ export function AmbientStoreMusic({ selection, enabled, playing, onPlaybackError
     if (!enabled || !playing) return;
     if (selection.kind === "preset" && selection.id === "off") return;
 
+    const track =
+      selection.kind === "uploaded"
+        ? { src: selection.objectUrl, volume: 0.45 }
+        : PRESET_TRACKS[selection.id as Exclude<AmbientPresetTrackId, "off">];
+
     let cancelled = false;
 
-    if (selection.kind === "uploaded") {
-      const audio = new Audio(selection.objectUrl);
-      audio.loop = true;
-      audio.volume = 0.45;
-      cleanupRef.current = () => {
-        audio.pause();
-        audio.src = "";
-      };
-      audio.play().catch((err) => {
-        if (!cancelled) onPlaybackError?.(err instanceof Error ? err.message : "Unable to play uploaded music");
-      });
-      return () => {
-        cancelled = true;
-        cleanupRef.current?.();
-        cleanupRef.current = null;
-      };
-    }
+    const audio = new Audio(track.src);
+    audio.loop = true;
+    audio.volume = track.volume;
+    audio.preload = "auto";
 
-    if (selection.id === "off") return;
-    const track = PRESET_TRACKS[selection.id];
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    const audioContext = new AudioContextClass();
+    cleanupRef.current = () => fadeOutAndStop(audio);
 
-    const masterGain = audioContext.createGain();
-    masterGain.gain.value = track.volume;
-    masterGain.connect(audioContext.destination);
-
-    const oscillators = track.notes.map((frequency, index) => {
-      const oscillator = audioContext.createOscillator();
-      const gain = audioContext.createGain();
-      oscillator.type = index % 2 === 0 ? "sine" : "triangle";
-      oscillator.frequency.value = frequency / 2;
-      gain.gain.value = 0.08;
-      oscillator.connect(gain);
-      gain.connect(masterGain);
-      oscillator.start();
-      return { oscillator, gain };
-    });
-
-    const lfo = audioContext.createOscillator();
-    const lfoGain = audioContext.createGain();
-    lfo.frequency.value = track.lfo;
-    lfoGain.gain.value = 0.018;
-    lfo.connect(lfoGain);
-    lfoGain.connect(masterGain.gain);
-    lfo.start();
-
-    cleanupRef.current = () => {
-      oscillators.forEach(({ oscillator, gain }) => {
-        gain.gain.setTargetAtTime(0, audioContext.currentTime, 0.4);
-        oscillator.stop(audioContext.currentTime + 0.6);
-      });
-      lfo.stop(audioContext.currentTime + 0.6);
-      window.setTimeout(() => void audioContext.close(), 800);
-    };
-
-    audioContext.resume().catch((err) => {
-      if (!cancelled) onPlaybackError?.(err instanceof Error ? err.message : "Unable to start ambient music");
+    // Browsers block playback until the visitor has interacted with the page;
+    // the HUD surfaces the rejection so the demo driver can hit Play Music.
+    audio.play().catch((err) => {
+      if (!cancelled) onPlaybackError?.(err instanceof Error ? err.message : "Unable to play ambient music");
     });
 
     return () => {
@@ -132,10 +108,4 @@ export function AmbientStoreMusic({ selection, enabled, playing, onPlaybackError
   }, [enabled, onPlaybackError, playing, selection]);
 
   return null;
-}
-
-declare global {
-  interface Window {
-    webkitAudioContext?: typeof AudioContext;
-  }
 }

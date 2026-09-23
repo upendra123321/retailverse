@@ -38,10 +38,10 @@ Because it's rules, not roleplay, it's fast — headless, no browser, no GPU. A 
 ### [Slide 10–11 — Validation & Business Value] 2:50–3:15
 We correlate AI results against real sessions — similarity scores, a heatmap comparing real and AI attention on the same floor plan. That's our actual measurable success indicator, not a nice-to-have chart. The target user: any retail or CPG insights team deciding shelf and ad spend before committing budget — and the path beyond this prototype is the same pipeline, scaled to a retailer's full store estate.
 
-### [Slides 12–15 — Tech, security & evidence] 3:15–3:45
-Under the hood: React and Three.js, FastAPI and SQLite, one Docker image, one HTTPS origin, because webcams need that. The LLM is optional seasoning for narration only. And because "trust us" isn't evidence: every LLM-backed endpoint is rate-limited, every consequential action is audit-logged, user text is screened for prompt injection — backed by 32 automated tests, passing in under a second, that you can run yourself.
+### [Slides 12–15 — Tech, security & evidence] 3:15–3:50
+Under the hood: React and Three.js, FastAPI and SQLite, one Docker image, one HTTPS origin, because webcams need that. The LLM is optional seasoning for narration only. And because "trust us" isn't evidence: every request is size- and shape-checked before we touch it, every LLM-backed endpoint is rate-limited, every consequential action is audit-logged, user text is screened for prompt injection, and locked-down security headers block clickjacking and stray camera access — backed by 61 automated tests, passing in under two seconds, that you can run yourself.
 
-### [Slide 16 — Challenges] 3:45–3:55
+### [Slide 16 — Challenges] 3:50–4:00
 We hit real potholes — a cross-platform install bug, an LLM call that once hung the UI — and every one got a real fix, not a band-aid.
 
 ### [Slide 18–19 — Impact & Next Steps] 3:55–4:20

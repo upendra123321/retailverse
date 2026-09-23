@@ -416,26 +416,17 @@
   border-top: 1px solid rgba(255, 255, 255, 0.18);
 }
 
-.hud-hidden-file-input {
-  display: none;
-}
-
-.hud-music-actions {
+.hud-file-picker {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
   margin-top: 8px;
 }
 
-.hud-music-actions button {
-  margin-top: 0;
-}
-
-.hud-selected-file {
-  margin: 6px 0 0;
+.hud-file-picker input {
+  max-width: 100%;
   font-size: 12px;
-  opacity: 0.82;
-  word-break: break-word;
 }
 
 .hud-music-insight {
